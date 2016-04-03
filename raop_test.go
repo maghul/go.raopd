@@ -1,15 +1,24 @@
 package raopd
 
 import (
-	"github.com/stretchr/testify/assert"
-	//	"io"
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func getKeyfile() io.Reader {
+	f, err := os.Open("/tmp/airport.key")
+	if err != nil {
+		panic("No key found...")
+	}
+	return f
+}
 
 func readRaopResponse(cr *bufio.Reader) string {
 	b := bytes.NewBufferString("")
@@ -37,12 +46,12 @@ func raopTxRx(cw *bufio.Writer, cr *bufio.Reader, msg string) string {
 }
 
 func TestRaopSetup(t *testing.T) {
-	rf, err := MakeRaopFactory(10, getKeyfile())
+	rf, err := NewServiceRegistry(getKeyfile())
 	if err != nil {
 		panic(err)
 	}
 
-	raop, err := rf.MakeRaopSession(5100, nil)
+	raop, err := rf.RegisterService(makeTestClient())
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +59,7 @@ func TestRaopSetup(t *testing.T) {
 
 	assert.NotNil(t, raop)
 
-	conn, err := net.Dial("tcp", "127.0.0.1:5100")
+	conn, err := net.Dial("tcp", "127.0.0.1:15100")
 	if err != nil {
 		panic(err)
 	}

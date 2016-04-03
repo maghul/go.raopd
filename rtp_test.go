@@ -6,7 +6,7 @@ import (
 )
 
 func TestRtpDataReceive(t *testing.T) {
-	r := &Raop{}
+	r := &raop{}
 	r.seqchan = make(chan *rtpPacket, 16)
 
 	handler, _, _ := r.getDataHandler()
@@ -18,7 +18,7 @@ func TestRtpDataReceive(t *testing.T) {
 	checkSeqNo(t, r.seqchan, -1)
 }
 
-func startRtpMock(r *Raop, f rtpFactory) *net.UDPConn {
+func startRtpMock(r *raop, f rtpFactory) *net.UDPConn {
 	r.seqchan = make(chan *rtpPacket, 16)
 
 	rtp := startRtp(f)
@@ -32,7 +32,7 @@ func startRtpMock(r *Raop, f rtpFactory) *net.UDPConn {
 }
 
 func TestRtpDataReceive2(t *testing.T) {
-	r := &Raop{}
+	r := &raop{}
 	conn := startRtpMock(r, r.getDataHandler)
 
 	conn.Write(testPacket(66, 96).content)
@@ -42,7 +42,7 @@ func TestRtpDataReceive2(t *testing.T) {
 }
 
 func TestRtpControlReceive(t *testing.T) {
-	r := &Raop{}
+	r := &raop{}
 	conn := startRtpMock(r, r.getControlHandler)
 
 	conn.Write(testPacket(68, 86).content)

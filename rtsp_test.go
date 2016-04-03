@@ -14,6 +14,11 @@ import (
 type testClient struct {
 	volume   float32
 	pos, end int
+	si       *ServiceInfo
+}
+
+func (tc *testClient) ServiceInfo() *ServiceInfo {
+	return tc.si
 }
 
 func (tc *testClient) LoadCoverArt(mimetype string, content io.Reader) {
@@ -39,9 +44,21 @@ func (tc *testClient) Pause() {
 	fmt.Println("TEST CLIENT:", "Pause...")
 }
 
+func (tc *testClient) Close() {
+	fmt.Println("TEST CLIENT:", "Close...")
+}
+
 func (tc *testClient) AudioWriter() io.Writer {
 	fmt.Println("TEST CLIENT:", "AudioWrite")
 	panic("I'm sorry Dave, I can't allow you to do that.")
+}
+
+func makeTestClient() Service {
+	tc := &testClient{}
+	tc.si = &ServiceInfo{}
+	tc.si.Port = 15100
+	tc.si.HardwareAddress, _ = net.ParseMAC("11:22:33:13:37:17")
+	return tc
 }
 
 func makeTestRtspSession() *rtspSession {
@@ -49,9 +66,10 @@ func makeTestRtspSession() *rtspSession {
 	if err != nil {
 		panic(err)
 	}
-	r := &Raop{}
+	r := &raop{}
 	r.samplingRate = 44100
-	r.plc = &testClient{}
+
+	r.plc = makeTestClient()
 	return &rtspSession{i, r, nil}
 }
 
