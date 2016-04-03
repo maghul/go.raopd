@@ -6,7 +6,7 @@ import (
 	"net"
 )
 
-const max_rtp_packet_size = 1500
+const max_rtp_packet_size = 1800
 
 type rtpHandler func(pkt *rtpPacket)
 type rtpTransmitter func(conn *net.UDPConn, client *net.UDPAddr)
@@ -19,7 +19,6 @@ type rtpPacket struct {
 }
 
 func makeRtpPacket() *rtpPacket {
-	// TODO: We can calculate this from fmtp field.
 	return &rtpPacket{0, nil, make([]byte, max_rtp_packet_size)}
 }
 
