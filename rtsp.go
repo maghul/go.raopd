@@ -205,6 +205,7 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		h.Add("Transport", transport)
 
 	case "GET_PARAMETER":
+		fmt.Println("GET_PARAMETER")
 		raop := rs.raop
 
 		raop.clientUserAgent = req.Header["User-Agent"][0]
@@ -216,6 +217,7 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		io.Copy(rw, content)
 
 	case "SET_PARAMETER":
+		fmt.Println("SET_PARAMETER")
 		contentType := req.Header["Content-Type"][0]
 		switch contentType {
 		case "text/parameters":
