@@ -2,6 +2,7 @@ package raopd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -18,6 +19,8 @@ type bonjourRecord struct {
 	serviceHost   string
 	Port          uint16
 	text          [][]byte
+
+	obj *dbus.Object
 }
 
 func getMyFQDN() string {
@@ -59,7 +62,7 @@ func makeAPBonjourRecord(raop *raop) *bonjourRecord {
 	hwaddr := hardwareAddressToServicePrefix(raop.hwaddr)
 	port := raop.port()
 
-	r.serviceName = fmt.Sprintf("%s@%s", hwaddr, "durer")
+	r.serviceName = fmt.Sprintf("%s@%s", hwaddr, raop.plc.ServiceInfo().Name)
 	r.serviceType = "_raop._tcp"
 	r.serviceDomain = "local" // sdomain
 	r.serviceHost = fqdn      // shost
@@ -88,28 +91,33 @@ func makeAPBonjourRecord(raop *raop) *bonjourRecord {
 }
 
 func (r *bonjourRecord) Unpublish() {
-	fmt.Println("bonjour unpublish...")
-	// TODO: do...
+	fmt.Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
+	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Free", 0)
+	r.obj = nil
 }
 
-func (r *bonjourRecord) Publish() {
+func (r *bonjourRecord) Publish() error {
 	var dconn *dbus.Conn
 	var obj *dbus.Object
 	var path dbus.ObjectPath
 	var err error
 
+	if r.obj != nil {
+		return errors.New(fmt.Sprintf("Service '%s' is alread published", r.serviceName))
+	}
 	dconn, err = dbus.SystemBus()
 	if err != nil {
-		log.Fatal("Fatal error ", err.Error())
+		//		log.Fatal("Fatal error ", err.Error())
+		return err
 	}
 
 	obj = dconn.Object("org.freedesktop.Avahi", "/")
 	obj.Call("org.freedesktop.Avahi.Server.EntryGroupNew", 0).Store(&path)
 
-	obj = dconn.Object("org.freedesktop.Avahi", path)
+	r.obj = dconn.Object("org.freedesktop.Avahi", path)
 
 	// http://www.dns-sd.org/ServiceTypes.html
-	c := obj.Call("org.freedesktop.Avahi.EntryGroup.AddService", 0,
+	c := r.obj.Call("org.freedesktop.Avahi.EntryGroup.AddService", 0,
 		int32(-1),       // avahi.IF_UNSPEC
 		int32(-1),       // avahi.PROTO_UNSPEC
 		uint32(0),       // flags
@@ -119,7 +127,10 @@ func (r *bonjourRecord) Publish() {
 		r.serviceHost,   // shost
 		r.Port,          // port
 		r.text)          // text record
-	fmt.Println("err=", c.Err)
-	obj.Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
-	fmt.Println("Publishing! port=", r.Port)
+	if c.Err != nil {
+		return c.Err
+	}
+	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
+	fmt.Println("Publishing! ", r.serviceName, " as service on port=", r.Port)
+	return nil
 }

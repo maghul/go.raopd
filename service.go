@@ -68,7 +68,11 @@ func (rf *ServiceRegistry) RegisterService(service Service) (*ServiceRef, error)
 	go s.Serve(r.l)
 
 	r.br = makeAPBonjourRecord(r)
-	r.br.Publish()
+	err = r.br.Publish()
+	if err != nil {
+		s.Close()
+		return nil, err
+	}
 
 	return svc, nil
 }

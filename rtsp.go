@@ -68,6 +68,10 @@ func makeRtspServer(i *info, raop *raop) *rtspServer {
 	return r
 }
 
+func (r *rtspServer) Close() {
+	// TODO: Close the RTSP server and possible the RTP servers as well.
+}
+
 func statusMap(code int) string {
 	return "OK"
 }
