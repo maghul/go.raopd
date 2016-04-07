@@ -117,7 +117,6 @@ func TestSequenceDoubleGap(t *testing.T) {
 	checkSeqNo(t, out, 6)
 	checkSeqNo(t, out, 7)
 	checkSeqNo(t, out, -1)
-	checkReq(t, request, 5, 2)
 	checkReq(t, request, -1, 0)
 
 }

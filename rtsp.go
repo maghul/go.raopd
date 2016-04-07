@@ -183,7 +183,8 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 		rtsplog.Debug.Println("RAOP AESKEY=", rs.raop.aeskey)
-		rs.raop.startRtp(remote, rtpmap, fmtp, aeskey, aesiv)
+		rs.raop.startRtp()
+		rs.raop.initAlac(remote, rtpmap, fmtp)
 
 	case "SETUP":
 		raop := rs.raop
@@ -215,17 +216,15 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		switch contentType {
 		case "text/parameters":
 			s := readToString(req.Body)
-			//
 			s = strings.Trim(s, " \r\n")
 			var vol float32
 			var start, current, end int64
-			fmt.Printf("s='%s'\n", s)
 			switch {
 			case scanf(s, "volume: %f", &vol):
-				fmt.Println("volume:", vol)
+				//				fmt.Println("volume:", vol)
 				rs.raop.plc.SetVolume(vol)
 			case scanf(s, "progress: %d/%d/%d", &start, &current, &end):
-				fmt.Println("progress:", start, current, end)
+				//				fmt.Println("progress:", start, current, end)
 				rs.raop.setProgress(start, current, end)
 			}
 		case "image/jpeg":

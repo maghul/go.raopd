@@ -58,7 +58,7 @@ func (r *rtspHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-func (r *raop) startRtp(remote, rtpmap, fmtpstr string, aeskey []byte, aesiv []byte) {
+func (r *raop) startRtp() {
 	fmt.Println("startRtp...")
 	r.seqchan = make(chan *rtpPacket, 256)
 	r.rrchan = make(chan rerequest, 128)
@@ -68,7 +68,9 @@ func (r *raop) startRtp(remote, rtpmap, fmtpstr string, aeskey []byte, aesiv []b
 		r.data = startRtp(r.getDataHandler)
 		r.timing = startRtp(r.getTimingHandler)
 	}
+}
 
+func (r *raop) initAlac(remote, rtpmap, fmtpstr string) {
 	af := alac.NewAlacConfFromFmtp(fmtpstr)
 	r.alac = alac.MakeAlacFile(af)
 }

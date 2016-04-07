@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"testing"
 
@@ -157,7 +158,14 @@ Active-Remote: 84694584
 User-Agent: AirPlay/267.3
 
 `
+	var err error
 	r := makeTestRtspSession()
+	raddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:22")
+	r.c, err = net.DialTCP("tcp", nil, raddr)
+	if err != nil {
+		panic(err)
+	}
+
 	resp, err := request(r, req)
 
 	assert.Nil(t, err)
@@ -165,7 +173,7 @@ User-Agent: AirPlay/267.3
 	ha := headerAsserter{t, resp.Header}
 	ha.assert("0", "Cseq")
 	ha.assert("connected; type=analog", "Apple-Jack-Status")
-	ha.assert("VwIP3Ghly/c8X7nnvOowSq38HMKRx9XYys+yOMqAhQShmBT2tdQtjU71zlPsJGLHMV3mJyelvIGJEjituU9SFPQehk04gOsu3WYT1aWXfg6nkSNvvlyWThOm92FNY5oLEnGpfotInqC1ZyR11PkPbZnHFJqzcq1qdUeQ4QSdTkIAu2tknl0eH0t4srEVF1ITacG4yBtx0vf4QA9oe3ltcjIbpKueIXi6D5TE9LxW55m5Y0suI2KGUZlwYYWIMWgTXOK0Fgh+rPK98RT0SxZTUtnK/dZN2HGqcpHqNRy6MriXiuaOctRotdhUtfqTMsQQ/x+MMDcMx3IjY1Y0ER7cCw", "Apple-Response")
+	ha.assert("pVWNzyUJKDIaBI7Rf24VIncUeM3KxzA8nLOOkBOA5qJ5Ia0gYzFs+Axs8kHB6NWnx0rnz9t8oAAFmqFsNIzGjVaquzA8nA7wOx8f6qj0fnL7hcl1SU3o8EBiWhzwsvHIZGd1YYrtShsMr+5fdwrBmy8OCjTecN11od7UB1K5os9aRGKQnetiYsQf1O8/JLgWEtTtogINxTfdhVZ5VLaG6EWqcFzxIvEKLXKDEWLcFBflBuqxoubLFm0Yt6YbBisL3W4mh2PVxp53iNdhW7bUUPo6s4R4BvLKt8Oo78bMvmbtsdPEkWQmHr+Ul5DWvDHInfJ1vz2iM6zMz71RxZYfGw", "Apple-Response")
 	ha.assert("ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER", "Public")
 }
 
@@ -214,14 +222,18 @@ User-Agent: AirPlay/267.3
 
 `
 	r := makeTestRtspSession()
+	r.raop.startRtp()
+
 	resp, err := request(r, req)
 
+	expected := fmt.Sprintf("RTP/AVP/UDP;unicast;mode=record;timing_port=%d;events;control_port=%d;server_port=%d\nSession: DEADBEEF",
+		r.raop.timing.Port(), r.raop.control.Port(), r.raop.data.Port())
 	assert.Nil(t, err)
 	assert.Equal(t, 200, resp.StatusCode, "StatusCode")
 	ha := headerAsserter{t, resp.Header}
 	ha.assert("2", "Cseq")
 	ha.assert("connected; type=analog", "Apple-Jack-Status")
-	ha.assert("RTP/AVP/UDP;unicast;mode=record;timing_port=47021;events;control_port=42365;server_port=42148\nSession: DEADBEEF", "Transport")
+	ha.assert(expected, "Transport")
 
 	assert.Equal(t, "19050F2FE0FD618D", r.raop.dacpID)
 	assert.Equal(t, "84694584", r.raop.activeRemote)
@@ -254,7 +266,7 @@ volume
 
 func TestSetParameterVolume(t *testing.T) {
 	req := `SET_PARAMETER rtsp://fe80::461e:a1ff:fece:f4a9/9953613529495192746 RTSP/1.0
-Content-Length: 8
+Content-Length: 15
 Content-Type: text/parameters
 CSeq: 4
 DACP-ID: 19050F2FE0FD618D
