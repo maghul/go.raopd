@@ -18,8 +18,9 @@ type ServiceInfo struct {
 	// If the sink wants coverart. See SetCoverArt in AirplaySink
 	SupportsCoverArt bool
 
-	// If the client wants metadata, song info, artist and track name
-	SupportsMetaData bool
+	// If the client wants metadata, song info, artist and track name.
+	// Should be "XML" or "JSON", if it is "" then no metadata will be supplied.
+	SupportsMetaData string
 
 	// The name of the sink
 	Name string

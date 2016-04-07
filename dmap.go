@@ -32,9 +32,14 @@ func (d *dmap) SetData(data []byte) {
 }
 
 func (d *dmap) String(format string) string {
-	b := bytes.NewBufferString("")
-	d.Write(b, format)
-	return b.String()
+	format = strings.ToLower(format)
+	if format == "xml" || format == "json" {
+		b := bytes.NewBufferString("")
+		d.Write(b, format)
+		return b.String()
+	} else {
+		return ""
+	}
 }
 
 func (d *dmap) Write(w io.Writer, format string) {
