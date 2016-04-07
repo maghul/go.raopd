@@ -55,6 +55,10 @@ func (tc *testClient) AudioWriter() io.Writer {
 	panic("I'm sorry Dave, I can't allow you to do that.")
 }
 
+func (tc *testClient) AudioWriterErr(err error) {
+	fmt.Println("TEST CLIENT:", "AudioWriterErr", err)
+}
+
 func makeTestClient() Service {
 	tc := &testClient{}
 	tc.si = &ServiceInfo{}

@@ -37,6 +37,7 @@ type raop struct {
 
 	aeskey cipher.Block
 	aesiv  []byte
+	mode   cipher.BlockMode
 }
 
 func (r *raop) String() string {
@@ -128,8 +129,10 @@ func (r *raop) setProgress(start, current, end int64) {
 }
 
 func (r *raop) handleAudioPacket(pkt *rtpPacket) {
-	fmt.Println("Received audio packet ", pkt.seqno)
-	mode := cipher.NewCBCDecrypter(r.aeskey, r.aesiv)
+	//	fmt.Println("Received audio packet ", pkt.seqno)
+	//	if (r.mode==nil) {
+	r.mode = cipher.NewCBCDecrypter(r.aeskey, r.aesiv)
+	//	}
 
 	ciphertext := pkt.content[12:]
 	l := len(ciphertext) / 16
@@ -138,10 +141,15 @@ func (r *raop) handleAudioPacket(pkt *rtpPacket) {
 	if len(ciphertext)%aes.BlockSize != 0 {
 		panic("ciphertext is not a multiple of the block size")
 	}
-	mode.CryptBlocks(ciphertext, ciphertext)
+	r.mode.CryptBlocks(ciphertext, ciphertext)
 
 	n := r.alac.Decode(pkt.content[12:], r.audioBuffer)
 
 	of := r.plc.AudioWriter()
-	of.Write(r.audioBuffer[0:n])
+	if of != nil {
+		_, err := of.Write(r.audioBuffer[0:n])
+		if err != nil {
+			r.plc.AudioWriterErr(err)
+		}
+	}
 }
