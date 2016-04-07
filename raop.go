@@ -19,7 +19,8 @@ type raop struct {
 	plc         Service
 	hwaddr      net.HardwareAddr
 	audioBuffer []byte
-	alac        alac.AlacFile
+	alac        *alac.AlacDecoder
+	alacConf    *alac.AlacConf
 
 	// TODO: This should be considered session data. There is a 1-1 relationship
 	//       between an Raop instance and a session instance but cover different
@@ -27,7 +28,6 @@ type raop struct {
 	dacpID          string
 	activeRemote    string
 	clientUserAgent string
-	samplingRate    int64
 	br              *bonjourRecord
 
 	data, control, timing *rtp
@@ -71,8 +71,8 @@ func (r *raop) startRtp() {
 }
 
 func (r *raop) initAlac(remote, rtpmap, fmtpstr string) {
-	af := alac.NewAlacConfFromFmtp(fmtpstr)
-	r.alac = alac.MakeAlacFile(af)
+	r.alacConf = alac.NewAlacConfFromFmtp(fmtpstr)
+	r.alac = alac.NewAlacDecoder(r.alacConf)
 }
 
 func (r *raop) teardown() {
@@ -109,7 +109,8 @@ func (r *raop) getParameters(req io.Reader, resp io.Writer) {
 }
 
 func (r *raop) rtptoms(rtp int64) int {
-	return int((rtp * 1000) / r.samplingRate)
+	ac := r.alacConf
+	return int((rtp * 1000) / int64(ac.SampleRate()))
 }
 
 func (r *raop) setProgress(start, current, end int64) {

@@ -51,8 +51,6 @@ func (rf *ServiceRegistry) RegisterService(service Service) (*ServiceRef, error)
 
 	r.audioBuffer = make([]byte, 8192)
 
-	r.samplingRate = 44100 // TODO: Get this from paramaters
-
 	r.hwaddr = si.HardwareAddress
 
 	r.rf = rf

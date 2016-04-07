@@ -2,6 +2,7 @@ package raopd
 
 import (
 	"bytes"
+	"emh/audio/alac"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -68,7 +69,6 @@ func makeTestRtspSession() *rtspSession {
 		panic(err)
 	}
 	r := &raop{}
-	r.samplingRate = 44100
 
 	r.plc = makeTestClient()
 	return &rtspSession{i, r, nil}
@@ -301,6 +301,10 @@ User-Agent: AirPlay/267.3
 progress: 866155144/880664705/900835976
 `
 	r := makeTestRtspSession()
+
+	fmtp := "96 352 0 16 40 10 14 2 255 0 0 44100"
+	r.raop.alacConf = alac.NewAlacConfFromFmtp(fmtp)
+
 	resp, err := request(r, req)
 
 	assert.Nil(t, err)
