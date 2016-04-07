@@ -1,6 +1,7 @@
 package raopd
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -111,6 +112,14 @@ func (r *raop) getTimingHandler() (rtpHandler, rtpTransmitter, string) {
 	}, nil, "TIMING"
 }
 
+func sameUDPAddr(a, b *net.UDPAddr) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	} else {
+		return bytes.Compare(a.IP, b.IP) == 0 && a.Port == b.Port
+	}
+}
+
 func startRtp(f rtpFactory) *rtp {
 
 	caddr, err := net.ResolveUDPAddr("udp", ":0")
@@ -133,11 +142,13 @@ func startRtp(f rtpFactory) *rtp {
 	if handler != nil {
 		go func() {
 			defer func() { conn.Close() }()
+			paddr := (*net.UDPAddr)(nil)
 			for {
 				pkt := makeRtpPacket()
 				n, addr, err := conn.ReadFromUDP(pkt.buf)
-				if addrchan != nil {
+				if addrchan != nil && !sameUDPAddr(addr, paddr) {
 					addrchan <- addr
+					paddr = addr
 				}
 				if err != nil {
 					fmt.Println("Panic err=", err)
