@@ -233,14 +233,21 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 				//				fmt.Println("progress:", start, current, end)
 				rs.raop.setProgress(start, current, end)
 			}
-		case "image/jpeg":
-			fmt.Println("AUDIO CLIENT:", "LoadCoverArt", contentType)
-			// TODO: Find a way for client to say no thanks to coverart.
-			buf, err := ioutil.ReadAll(req.Body)
-			if err != nil {
-				panic(err)
+		case "image/jpeg", "image/png":
+			loadCoverArt := false
+			si := rs.raop.plc.ServiceInfo()
+			if si != nil {
+				loadCoverArt = si.SupportsCoverArt
 			}
-			rs.raop.plc.SetCoverArt(contentType, bytes.NewBuffer(buf).Bytes())
+			if loadCoverArt {
+				buf, err := ioutil.ReadAll(req.Body)
+				if err != nil {
+					return
+				}
+				rs.raop.plc.SetCoverArt(contentType, bytes.NewBuffer(buf).Bytes())
+			} else {
+				io.Copy(ioutil.Discard, req.Body)
+			}
 		case "application/x-dmap-tagged":
 			daap, err := newDmap(req.Body)
 			if err != nil {
