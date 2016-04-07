@@ -16,12 +16,13 @@ type raop struct {
 	rf *ServiceRegistry
 	l  net.Listener
 
-	plc          Service
-	hwaddr       net.HardwareAddr
-	audioBuffer  []byte
-	alac         *alac.AlacDecoder
-	alacConf     *alac.AlacConf
-	deviceVolume float32
+	plc         Service
+	hwaddr      net.HardwareAddr
+	audioBuffer []byte
+	alac        *alac.AlacDecoder
+	alacConf    *alac.AlacConf
+
+	vol *volumeHandler
 	// TODO: This should be considered session data. There is a 1-1 relationship
 	//       between an Raop instance and a session instance but cover different
 	//       functionality
@@ -91,8 +92,7 @@ func (r *raop) getParameter(name string) string {
 	fmt.Println("------------------ getParameter: <", name, ">")
 	switch name {
 	case "volume":
-		fmt.Println("------------------ getParameter: r.deviceVolume=", r.deviceVolume)
-		return fmt.Sprintf("%f", r.deviceVolume)
+		return fmt.Sprintf("%f", r.vol.DeviceVolume())
 	default:
 		return ""
 	}

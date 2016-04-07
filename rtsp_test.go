@@ -78,6 +78,11 @@ func makeTestRtspSession() *rtspSession {
 	r.dacp.crc = make(chan func() error, 12)
 
 	r.plc = makeTestClient()
+
+	r.vol = &volumeHandler{}
+	r.vol.deviceVolumeChan = make(chan float32, 8)
+	r.vol.serviceVolumeChan = make(chan float32, 8)
+
 	return &rtspSession{i, r, nil}
 }
 
@@ -295,8 +300,10 @@ volume: 3.1415
 	ha.assert("4", "Cseq")
 	ha.assert("connected; type=analog", "Apple-Jack-Status")
 
-	tc := r.raop.plc.(*testClient)
-	assert.Equal(t, float32(3.1415), tc.volume)
+	//tc := r.raop.plc.(*testClient)
+	// This is set in the volume control
+	volume := <-r.raop.vol.deviceVolumeChan
+	assert.Equal(t, float32(3.1415), volume)
 
 }
 

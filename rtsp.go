@@ -227,8 +227,7 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 			var start, current, end int64
 			switch {
 			case scanf(s, "volume: %f", &vol):
-				//				fmt.Println("volume:", vol)
-				rs.raop.plc.SetVolume(vol)
+				rs.raop.vol.SetServiceVolume(vol)
 			case scanf(s, "progress: %d/%d/%d", &start, &current, &end):
 				//				fmt.Println("progress:", start, current, end)
 				rs.raop.setProgress(start, current, end)
