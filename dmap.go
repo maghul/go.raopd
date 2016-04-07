@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 )
 
 // This is the DMAP tag handler. It will read the binary encoded DMAP metadata
@@ -107,7 +108,14 @@ func dmapPrintUint(w *bufio.Writer, json bool, data []byte, indent int, length i
 }
 
 func dmapPrintData(w *bufio.Writer, json bool, data []byte, indent int, length int) []byte {
-	w.WriteString("***DATA***")
+	s := fmt.Sprint(data[0:length])
+	s = strings.Replace(s, " ", ", ", -1)
+
+	if json {
+		fmt.Fprint(w, s)
+	} else {
+		fmt.Fprint(w, "<!CDATA<", s, ">>")
+	}
 	return data[length:]
 }
 
@@ -123,7 +131,13 @@ func dmapPrintStr(w *bufio.Writer, json bool, data []byte, indent int, length in
 }
 
 func dmapPrintDate(w *bufio.Writer, json bool, data []byte, indent int, length int) []byte {
-	w.WriteString("***DATE***")
+	dl := dmapIntToUint64(data[0:length])
+	dr := time.Duration(dl) * time.Second
+	t := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
+	t = t.Add(dr)
+	w.WriteRune('"')
+	w.WriteString(t.String())
+	w.WriteRune('"')
 	return data[length:]
 }
 
@@ -168,27 +182,38 @@ func dmapPrintDict(w *bufio.Writer, json bool, data []byte, indent int, length i
 
 func dmapWriteEntry(w *bufio.Writer, json bool, data []byte, indent int) []byte {
 	tag := string(data[0:4])
-	entry, ok := dmapEntryMap[tag]
-	if !ok {
-		panic(fmt.Sprintf("DMAP tag '%s' is not known\n", tag))
-	}
-
 	len := int(binary.BigEndian.Uint32(data[4:]))
 
 	writeSpaces(w, indent)
+
+	var nd []byte
+
+	entry, ok := dmapEntryMap[tag]
+	entryname := tag
+	if ok {
+		entryname = entry.name
+	}
 	if json {
 		w.WriteRune('"')
-		w.WriteString(entry.name)
+		w.WriteString(entryname)
 		w.WriteString("\": ")
 	} else {
 		w.WriteRune('<')
-		w.WriteString(entry.name)
+		w.WriteString(entryname)
 		w.WriteString(">")
 	}
-	nd := entry.printer(w, json, data[8:], indent, len)
+
+	if !ok {
+		dmaplog.Info.Println("DMAP tag '", tag, "' is not known")
+		dmapPrintData(w, json, data[8:8+len], indent, len)
+		nd = data[8+len:]
+	} else {
+		nd = entry.printer(w, json, data[8:], indent, len)
+	}
+
 	if !json {
 		w.WriteString("</")
-		w.WriteString(entry.name)
+		w.WriteString(entryname)
 		w.WriteString(">")
 	}
 	return nd
