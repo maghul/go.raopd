@@ -63,6 +63,7 @@ func (rf *ServiceRegistry) RegisterService(service Service) (*ServiceRef, error)
 
 	fmt.Println("Starting RTSP server at ", r.l.Addr())
 	s := makeRtspServer(rf.i, r)
+	r.rtsp = s
 	go s.Serve(r.l)
 
 	r.br = makeAPBonjourRecord(r)

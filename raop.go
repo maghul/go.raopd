@@ -30,6 +30,7 @@ type raop struct {
 	clientUserAgent string
 	br              *bonjourRecord
 
+	rtsp                  *rtspServer
 	data, control, timing *rtp
 
 	seqchan chan *rtpPacket
@@ -77,6 +78,13 @@ func (r *raop) initAlac(remote, rtpmap, fmtpstr string) {
 
 func (r *raop) teardown() {
 	fmt.Println("What do I need to teardown actually?")
+}
+
+func (r *raop) close() {
+	r.rtsp.Close()
+	r.data.Close()
+	r.control.Close()
+	r.timing.Close()
 }
 
 func (r *raop) getParameter(name string) string {
