@@ -1,6 +1,8 @@
 package raopd
 
-import ()
+import (
+	"fmt"
+)
 
 // Handle volume changes.
 
@@ -58,7 +60,7 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 	v.deviceVolumeChan = make(chan float32, 8)
 
 	// TODO: Get this from ServiceInfo
-	absoluteVolume := true
+	absoluteVolume := false
 
 	serviceVolume := float32(0)
 	targetVolume := float32(0)
@@ -72,6 +74,9 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 	}
 
 	go func() {
+		v.deviceVolume = <-v.deviceVolumeChan
+		serviceVolume = ios2decVolume(v.deviceVolume)
+		fmt.Println("serviceVolume=", serviceVolume)
 		for {
 			if absoluteVolume {
 
@@ -117,7 +122,70 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 			} else {
 				// Relative volume mode: Send up and down volume to the service while
 				// keeping the iDevice volume at the center.
-				panic("NYI")
+				if serviceVolume > 55 && serviceVolume < 45 {
+					fmt.Println("------ KICK!")
+					volChange(50 > serviceVolume)
+				}
+				fmt.Println("In relative volume normal mode")
+			normal_r:
+				for {
+					select {
+					case dVolume := <-v.deviceVolumeChan:
+						v.deviceVolume = dVolume
+						newVolume := ios2decVolume(dVolume)
+						//fmt.Println( "nr: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+
+						if newVolume > serviceVolume && newVolume > 50 {
+							fmt.Println("VOLUME UP")
+							setServiceVolume(1000)
+						}
+
+						if newVolume < serviceVolume && newVolume < 50 {
+							fmt.Println("VOLUME DOWN")
+							setServiceVolume(-1000)
+						}
+
+						fmt.Println("vol change...")
+						serviceVolume = newVolume
+						volChange(50 > serviceVolume)
+						break normal_r
+
+					case <-v.serviceVolumeChan:
+						// Volume changes from service is not interesting
+					}
+				}
+
+				fmt.Println("In relative volume bounce mode")
+			bounce_r:
+				for {
+					select {
+					case dVolume := <-v.deviceVolumeChan:
+						v.deviceVolume = dVolume
+						newVolume := ios2decVolume(dVolume)
+						//fmt.Println( "br: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+						if between(newVolume, 50, serviceVolume) && newVolume < 55 && newVolume > 45 {
+							serviceVolume = newVolume
+							break bounce_r
+						} else {
+							if newVolume > serviceVolume && newVolume > 50 {
+								fmt.Println("VOLUME UP")
+								setServiceVolume(1000)
+							}
+
+							if newVolume < serviceVolume && newVolume < 50 {
+								fmt.Println("VOLUME DOWN")
+								setServiceVolume(-1000)
+							}
+
+							volChange(50 > serviceVolume)
+						}
+						serviceVolume = newVolume
+
+					case <-v.serviceVolumeChan:
+						// Volume changes from service is not interesting
+					}
+				}
+
 			}
 		}
 	}()
