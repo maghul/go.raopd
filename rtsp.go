@@ -191,7 +191,6 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 		rtsplog.Debug.Println("RAOP AESKEY=", rs.raop.aeskey)
-		rs.raop.startRtp()
 		rs.raop.initAlac(remote, rtpmap, fmtp)
 
 	case "SETUP":
@@ -200,6 +199,8 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		raop.clientUserAgent = req.Header["User-Agent"][0]
 
 		session := "DEADBEEF"
+
+		rs.raop.startRtp()
 		transport := fmt.Sprintf("RTP/AVP/UDP;unicast;mode=record;timing_port=%d;events;control_port=%d;server_port=%d\nSession: %s",
 			raop.timing.Port(), raop.control.Port(), raop.data.Port(), session)
 		h.Add("Transport", transport)
