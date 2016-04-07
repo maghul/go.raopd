@@ -33,12 +33,12 @@ type raop struct {
 	rtsp                  *rtspServer
 	data, control, timing *rtp
 
-	seqchan chan *rtpPacket
-	rrchan  chan rerequest
-
-	aeskey cipher.Block
-	aesiv  []byte
-	mode   cipher.BlockMode
+	seqchan   chan *rtpPacket
+	rrchan    chan rerequest
+	sequencer sequencer
+	aeskey    cipher.Block
+	aesiv     []byte
+	mode      cipher.BlockMode
 }
 
 func (r *raop) String() string {
@@ -64,7 +64,7 @@ func (r *raop) startRtp() {
 	fmt.Println("startRtp...")
 	r.seqchan = make(chan *rtpPacket, 256)
 	r.rrchan = make(chan rerequest, 128)
-	startSequencer(r.seqchan, r.handleAudioPacket, r.rrchan)
+	r.sequencer = startSequencer(r.seqchan, r.handleAudioPacket, r.rrchan)
 	if r.control == nil {
 		r.control = startRtp(r.getControlHandler)
 		r.data = startRtp(r.getDataHandler)
@@ -79,6 +79,8 @@ func (r *raop) initAlac(remote, rtpmap, fmtpstr string) {
 
 func (r *raop) teardown() {
 	fmt.Println("What do I need to teardown actually?")
+	r.plc.Close()
+	r.sequencer.flush()
 }
 
 func (r *raop) close() {
@@ -131,7 +133,9 @@ func (r *raop) setProgress(start, current, end int64) {
 }
 
 func (r *raop) handleAudioPacket(pkt *rtpPacket) {
-	//	fmt.Println("Received audio packet ", pkt.seqno)
+	if pkt.seqno%100 == 0 {
+		fmt.Println("Received audio packet ", pkt.seqno)
+	}
 	//	if (r.mode==nil) {
 	r.mode = cipher.NewCBCDecrypter(r.aeskey, r.aesiv)
 	//	}

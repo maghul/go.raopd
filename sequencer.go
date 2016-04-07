@@ -4,14 +4,49 @@ import (
 	"fmt"
 )
 
+type sequencer chan bool
+
 type rerequest struct {
 	first, count uint16
+}
+
+func (s sequencer) flush() {
+	fmt.Println("SEQUENCE: flush request")
+	s <- true
+	fmt.Println("SEQUENCE: flush requested")
+}
+
+func sequencerDiagnostics(pkts map[uint16]*rtpPacket, recovery map[uint16]bool, start, end uint16) {
+	s := "ok"
+	b := start
+	fmt.Println("\nSEQUENCER: FAILURE: start=", start, ", end=", end)
+	for ii := start; ii != end+1; ii++ {
+		pkt, _ := pkts[ii]
+		rec, _ := recovery[ii]
+
+		ns := "ok"
+		if pkt == nil {
+			if rec {
+				ns = "in recovery"
+			} else {
+				ns = "unrecovered"
+			}
+		}
+		if ns != s {
+			fmt.Println("SEQUENCER: FAILURE: ", b, "...", ii, " state=", s)
+			s = ns
+			b = ii
+		}
+	}
+	fmt.Println("SEQUENCER: FAILURE: ", b, "...", end, " state=", s)
 }
 
 // This will take unordered data on the input channel and order
 // it to the output channel. It will also send rerequests on the
 // request channel if there are gaps in the indata
-func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan rerequest) {
+func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan rerequest) sequencer {
+	s := sequencer(make(chan bool))
+
 	go func() {
 		pkts := make(map[uint16]*rtpPacket)
 		recovery := make(map[uint16]bool)
@@ -22,6 +57,7 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 		next := pkt.seqno + 1
 		out(pkt)
 
+		defer func() { panic("SEQUENCER: loop exit!") }()
 		for {
 			recover = false
 		readloop:
@@ -49,7 +85,40 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 						break readloop
 					}
 				} else {
-					pkt = <-data
+					select {
+					case pkt = <-data:
+
+					case <-s: // Flush
+						fmt.Println("SEQUENCER: Flushing Sequencer")
+						pkts = make(map[uint16]*rtpPacket)
+						recovery = make(map[uint16]bool)
+						lgp = uint16(0)
+						recover = false
+
+					flushPackets:
+						for {
+							select {
+							case pkt = <-data:
+								fmt.Println("SEQUENCER: flushing incoming packet")
+							default:
+								break flushPackets
+							}
+
+						}
+						fmt.Println("SEQUENCER: Waiting for restart")
+						pkt = <-data
+						next = pkt.seqno + 1
+						out(pkt)
+						fmt.Println("SEQUENCER: Restarting")
+					}
+				}
+
+				span := int32(pkt.seqno) - int32(next)
+				if span < -50000 {
+					span += 0x10000
+				}
+				if span > 250 {
+					sequencerDiagnostics(pkts, recovery, next, pkt.seqno)
 				}
 
 				//				fmt.Println( "SEQUENCER:IN: pkt=", pkt.seqno )
@@ -120,5 +189,5 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 			}
 		}
 	}()
-
+	return s
 }
