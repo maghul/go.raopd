@@ -44,9 +44,15 @@ type Service interface {
 	// 16-bit depth at 44100 samples/second is currently supported.
 	AudioWriter() io.Writer
 
-	LoadCoverArt(mimetype string, content io.Reader)
+	// SetCoverArt will set the cover art of the currently playing track.
+	// May be ignored and can be disables by setting SupportsCoverArt to
+	// false in AirplaySinkInfo.
+	SetCoverArt(mimetype string, content []byte)
 
-	LoadMetadata(content io.Reader)
+	// SetMetadata will set the metadata of the currently playing track.
+	// The data is DMAP data in a JSON or XML representation. This is controlled
+	// by setting SupportsMetadata in AirplaySinkInfo to "JSON" or "XML"
+	SetMetadata(content string)
 
 	// Set the volume of the output device. The volume value may be an absolute
 	// value from 0 - 100, or it may be up down values using UP=1000 and DOWN=-1000

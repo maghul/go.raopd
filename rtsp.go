@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -231,7 +232,13 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 				rs.raop.setProgress(start, current, end)
 			}
 		case "image/jpeg":
-			rs.raop.plc.LoadCoverArt(contentType, req.Body)
+			fmt.Println("AUDIO CLIENT:", "LoadCoverArt", contentType)
+			// TODO: Find a way for client to say no thanks to coverart.
+			buf, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				panic(err)
+			}
+			rs.raop.plc.SetCoverArt(contentType, bytes.NewBuffer(buf).Bytes())
 		case "application/x-dmap-tagged":
 			daap, err := newDmap(req.Body)
 			if err != nil {
@@ -239,7 +246,8 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 				return
 			}
 			fmt.Println("daap=", daap)
-			//rs.raop.plc.LoadMetadata(req.Body)
+			// TODO: use the ServiceInfo
+			rs.raop.plc.SetMetadata(bytes.NewBufferString(daap.String("JSON")).String())
 		default:
 			rtsplog.Info().Println("SET_PARAMETER: Unknown Content-Type=", contentType)
 

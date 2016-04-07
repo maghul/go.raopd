@@ -23,10 +23,10 @@ func (tc *testClient) ServiceInfo() *ServiceInfo {
 	return tc.si
 }
 
-func (tc *testClient) LoadCoverArt(mimetype string, content io.Reader) {
+func (tc *testClient) SetCoverArt(mimetype string, content []byte) {
 }
 
-func (tc *testClient) LoadMetadata(content io.Reader) {
+func (tc *testClient) SetMetadata(content string) {
 }
 
 func (tc *testClient) SetVolume(volume float32) {
