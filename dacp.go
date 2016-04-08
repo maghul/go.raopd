@@ -36,7 +36,7 @@ func (d *dacp) open(id string, ar string) {
 			d.ar = ar
 
 			if d.req != nil {
-				d.req.Close()
+				d.req.close()
 				// close connection as well.
 			}
 

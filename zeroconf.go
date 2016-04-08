@@ -25,6 +25,11 @@ type bonjourRecord struct {
 	obj *dbus.Object
 }
 
+func init() {
+	requestChan = make(chan reqFunc, 5)
+	go runResolver(requestChan)
+}
+
 func getMyFQDN() string {
 	cmd := exec.Command("/bin/hostname", "-f")
 	var out bytes.Buffer
@@ -155,20 +160,10 @@ type zeroconfResolveReply struct {
 	txt  []string
 }
 
-var requestChan chan *zeroconfResolveRequest
+//var requestChan chan *zeroconfResolveRequest
+type reqFunc func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest)
 
-func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
-	if requestChan == nil {
-		requestChan = make(chan *zeroconfResolveRequest, 5)
-		go runResolver(requestChan)
-
-	}
-	result := make(chan *zeroconfResolveReply, 4)
-	req := &zeroconfResolveRequest{zeroconfResolveKey{srvName, srvType}, result, nil}
-	fmt.Println("resolveService: name=", srvName, ", type=", srvType)
-	requestChan <- req
-	return req, nil
-}
+var requestChan chan reqFunc
 
 func newResolver(dconn *dbus.Conn, avahi *dbus.Object, req *zeroconfResolveRequest) error {
 	c := avahi.Call("org.freedesktop.Avahi.Server.ServiceResolverNew", 0,
@@ -201,10 +196,6 @@ func toStringArray(d [][]byte) []string {
 	return r
 }
 
-func (zrr *zeroconfResolveRequest) Close() {
-	//panic("NYI")
-}
-
 func toTCPAddr(addr, port string) (*net.TCPAddr, error) {
 	ip := net.ParseIP(addr)
 	p, err := strconv.ParseInt(port, 10, 0)
@@ -220,7 +211,7 @@ func toString(i interface{}) string {
 	return s
 }
 
-func runResolver(requestChan chan *zeroconfResolveRequest) {
+func runResolver(requestChan chan reqFunc) {
 	//	browsers := make(map[string]*browser)
 	requests := make(map[zeroconfResolveKey]*zeroconfResolveRequest)
 	dconn, err := dbus.SystemBus()
@@ -258,15 +249,46 @@ func runResolver(requestChan chan *zeroconfResolveRequest) {
 			}
 
 		case r := <-requestChan:
-			fmt.Println("New Resolve Request: ", r)
-			_, exists := requests[r.zeroconfResolveKey]
-			if exists {
-				fmt.Fprintln(os.Stderr, "The request ", r.zeroconfResolveKey, " is already being resolved")
-			} else {
-				requests[r.zeroconfResolveKey] = r
-				newResolver(dconn, avahi, r)
-			}
+			r(dconn, avahi, requests)
 		}
 	}
 
+}
+
+func getRequestChan() chan reqFunc {
+	return requestChan
+}
+
+func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
+	result := make(chan *zeroconfResolveReply, 4)
+	req := &zeroconfResolveRequest{zeroconfResolveKey{srvName, srvType}, result, nil}
+	fmt.Println("resolveService: name=", srvName, ", type=", srvType)
+	getRequestChan() <- func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest) {
+		fmt.Println("New Resolve Request: ", req)
+		_, exists := requests[req.zeroconfResolveKey]
+		if exists {
+			fmt.Fprintln(os.Stderr, "The request ", req.zeroconfResolveKey, " is already being resolved")
+		} else {
+			requests[req.zeroconfResolveKey] = req
+			newResolver(dconn, avahi, req)
+		}
+	}
+	return req, nil
+}
+
+func (req *zeroconfResolveRequest) close() {
+	getRequestChan() <- func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest) {
+		fmt.Println("Delete Resolve Request: ", req)
+		_, exists := requests[req.zeroconfResolveKey]
+		if exists {
+			delete(requests, req.zeroconfResolveKey)
+			c := req.resolveObj.Call("org.freedesktop.Avahi.ServiceResolver.Free", 0)
+			err := c.Err
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Error closing ResolveRequest: ", err)
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, "The request ", req.zeroconfResolveKey, " doesn't exist!")
+		}
+	}
 }
