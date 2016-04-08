@@ -54,7 +54,10 @@ func (d *dacp) open(id string, ar string) {
 func (d *dacp) close() {
 	d.mrc <- func() error {
 		fmt.Println("Closing current DACP session.")
+		d.id = ""
+		d.ar = ""
 		d.addr = nil
+		d.req.close()
 		d.req = nil
 		return nil
 	}
