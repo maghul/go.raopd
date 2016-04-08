@@ -139,6 +139,7 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		if challenge != "" {
 			response, err := rs.handleChallenge(challenge)
 			if err != nil {
+				rtsplog.Info.Println("Could not handle challenge: ", challenge, ":", err)
 				rw.WriteHeader(400)
 				return
 			}
