@@ -71,6 +71,7 @@ func (r *raop) getControlHandler() (rtpHandler, rtpTransmitter, string) {
 		case 86:
 			pkt.content = pkt.content[4:]
 			pkt.seqno = binary.BigEndian.Uint16(pkt.content[2:4])
+			fmt.Println("CONTROL CHANNEL: Recovery Packet, seqno=", pkt.seqno)
 			r.seqchan <- pkt
 
 		default:
