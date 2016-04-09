@@ -41,6 +41,20 @@ func sequencerDiagnostics(pkts map[uint16]*rtpPacket, recovery map[uint16]bool, 
 	fmt.Println("SEQUENCER: FAILURE: ", b, "...", end, " state=", s)
 }
 
+func markUnrecoveredPackets(recovery map[uint16]int, pkts map[uint16]*rtpPacket, from,to uint16, defcon int) {
+	for ; from<to; from++ {
+		_, ok := pkts[from]
+		//if ok {
+		//	break
+		//}
+		level, _ := recovery[from]
+		if !ok && level<defcon {
+			fmt.Println( "MARKING PACKET ", from, " FOR REREQUEST AT DEFCON=", defcon,"!")
+			recovery[from] = 0   // Don't delete here since it will be set immediately 
+		}
+	}
+}
+
 // This will take unordered data on the input channel and order
 // it to the output channel. It will also send rerequests on the
 // request channel if there are gaps in the indata
@@ -49,11 +63,13 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 
 	go func() {
 		pkts := make(map[uint16]*rtpPacket)
-		recovery := make(map[uint16]bool)
+		recovery := make(map[uint16]int)
 		lgp := uint16(0)
 		recover := false
+		defcon := 0 // The current maximum recovery level.
 
 		pkt := <-data
+		fmt.Println( "INITIAL", pkt.seqno)
 		next := pkt.seqno + 1
 		out(pkt)
 
@@ -91,7 +107,7 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 					case <-s: // Flush
 						fmt.Println("SEQUENCER: Flushing Sequencer")
 						pkts = make(map[uint16]*rtpPacket)
-						recovery = make(map[uint16]bool)
+						recovery = make(map[uint16]int)
 						lgp = uint16(0)
 						recover = false
 
@@ -99,7 +115,7 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 						for {
 							select {
 							case pkt = <-data:
-								fmt.Println("SEQUENCER: flushing incoming packet")
+								fmt.Println("SEQUENCER: flushing incoming packet", pkt.seqno)
 							default:
 								break flushPackets
 							}
@@ -118,42 +134,49 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 					span += 0x10000
 				}
 				if span > 250 {
-					sequencerDiagnostics(pkts, recovery, next, pkt.seqno)
+					fmt.Println("Large span!")
+//					sequencerDiagnostics(pkts, recovery, next, pkt.seqno)
+//					markUnrecoveredPackets(recovery, pkts, next, pkt.seqno)
 				}
 
 				//				fmt.Println( "SEQUENCER:IN: pkt=", pkt.seqno )
-				// Any packet received will not have to be recovered.
-				delete(recovery, pkt.seqno)
 
 				switch {
 				case pkt.seqno == next: // Packet in sequence: just output it
-					recovery[next] = false
+					fmt.Println("IN SYNC ", pkt.seqno)
+					delete(recovery,next)
 					//					fmt.Println( "SEQUENCER:OUT: pkt=", pkt.seqno )
 					out(pkt)
 					next++
+					if (next==lgp) {
+						if (defcon>0) {
+							fmt.Println( "In sync again!" )
+						}
+						defcon = 0
+					}
 				case pkt.seqno > next: // Packet out of sequence. Stora and flag for recovery
+					fmt.Println("OUT OF SYNC ", pkt.seqno)
 					seqno := pkt.seqno
 					pkts[pkt.seqno] = pkt
 					if (seqno < 0x8000 && lgp > 0x8000) || seqno > lgp {
+						// Check if seqno>lgp also handles if it has wrapped.
 						// seqno has wrapped, top has not. i.e seqno is greater
+						// lgp is the latest.
 						lgp = seqno
-					}
-					// If we get a packet assume that we won't get any packages
-					// prior to this package. If we are missing any such package
-					// then we can assume that any recovery sent has failed and
-					// we need to send it again.
-					for {
-						if seqno == next {
-							break
-						}
-						seqno--
-						_, ok := pkts[seqno]
+						delete(recovery, pkt.seqno)
+					} else {
+						// If we get a packet less than top assume that we won't get
+						// any packages prior to this package. If we are missing any
+						// such packets then we can assume that any recovery sent has
+						// failed and we need to request these packets again.
+						// Only do the first gap since we will get here again if there
+						// are more gaps later.
+						// Set the defcon level to the recovered packet +1 
+						defcon = recovery[seqno]+1
+						delete(recovery, pkt.seqno)
 
-						if ok {
-							break
-						}
-						recovery[seqno] = false
-
+						fmt.Println( "DEFCON=", defcon )
+						markUnrecoveredPackets(recovery, pkts, next, seqno, defcon)
 					}
 					recover = true
 				}
@@ -164,17 +187,18 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 			// missing unrecovered packets.
 			first := -1
 			count := uint16(0)
+			fmt.Println( "CHECK GAPS ", next, "...", lgp )
 			for ii := next; ii != lgp+1; ii++ {
 				_, ok := pkts[ii]
 				rec, _ := recovery[ii]
 
-				ok = ok || rec // Ignore if not OK when its in recovery
-
+				fmt.Println( ii," is ok=", ok, " recovery=", rec )
+				ok = ok || rec>0 // Ignore if not OK when its in recovery
 				if first < 0 {
 					if !ok {
 						first = int(ii) // Start of a new request
 						count = 0
-						recovery[ii] = true
+						recovery[ii] = defcon
 					}
 				} else {
 					if ok {
@@ -182,7 +206,7 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 						request <- rerequest{uint16(first), count}
 						first = -1
 					} else {
-						recovery[ii] = true
+						recovery[ii] = defcon
 					}
 				}
 				count++
