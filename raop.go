@@ -45,6 +45,34 @@ func (r *raop) String() string {
 	return fmt.Sprint("RAOP: hw=", r.hwaddr)
 }
 
+func (r *raop) startRtspProcess() (err error) {
+	si := r.plc.ServiceInfo()
+	r.hwaddr = si.HardwareAddress
+
+	r.l, err = net.Listen("tcp", fmt.Sprintf(":%d", si.Port))
+	if err != nil {
+		return
+	}
+
+	fmt.Println("Starting RTSP server at ", r.l.Addr())
+	s := makeRtspServer(r.rf.i, r)
+	r.rtsp = s
+	go s.Serve(r.l)
+
+	r.startRaopProcess()
+
+	return
+}
+
+func (r *raop) startRaopProcess() {
+	r.dacp = newDacp()
+
+	r.vol = newVolumeHandler(r.plc.SetVolume, r.dacp.tx)
+
+	r.audioBuffer = make([]byte, 8192)
+
+}
+
 func (r *raop) port() uint16 {
 	a := r.l.Addr()
 	ta := a.(*net.TCPAddr)

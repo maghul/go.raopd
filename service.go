@@ -3,14 +3,13 @@ package raopd
 import (
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"strconv"
 )
 
 // This type is used to register services
 type ServiceRegistry struct {
-	i *info
+	i *info // actually only crypto stuff
 }
 
 type ServiceRef struct {
@@ -45,36 +44,14 @@ if it zero then an ephemeral port will be used.
 func (rf *ServiceRegistry) RegisterService(service Service) (*ServiceRef, error) {
 	svc := &ServiceRef{}
 
-	si := service.ServiceInfo()
+	svc.raop.plc = service
+	svc.raop.rf = rf
+	svc.raop.startRtspProcess()
 
-	var r *raop
-	r = &svc.raop
-	r.dacp = newDacp()
-
-	r.plc = service
-	r.vol = newVolumeHandler(r.plc.SetVolume, r.dacp.tx)
-
-	r.audioBuffer = make([]byte, 8192)
-
-	r.hwaddr = si.HardwareAddress
-
-	r.rf = rf
-
-	var err error
-	r.l, err = net.Listen("tcp", fmt.Sprintf(":%d", si.Port))
+	svc.raop.br = makeAPBonjourRecord(&svc.raop)
+	err := svc.raop.br.Publish()
 	if err != nil {
-		return nil, err
-	}
-
-	fmt.Println("Starting RTSP server at ", r.l.Addr())
-	s := makeRtspServer(rf.i, r)
-	r.rtsp = s
-	go s.Serve(r.l)
-
-	r.br = makeAPBonjourRecord(r)
-	err = r.br.Publish()
-	if err != nil {
-		s.Close()
+		svc.raop.close()
 		return nil, err
 	}
 
