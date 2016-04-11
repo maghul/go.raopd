@@ -115,7 +115,11 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 						fmt.Println("OUT OF SYNC ", pkt.seqno)
 					}
 					seqno := pkt.seqno
-					pkts[pkt.seqno] = pkt
+					if _, exists := pkts[pkt.seqno]; exists {
+						pkt.Reclaim()
+					} else {
+						pkts[pkt.seqno] = pkt
+					}
 					gap <- seqno
 					if (seqno < 0x8000 && lgp > 0x8000) || seqno > lgp {
 						// Check if seqno>lgp also handles if it has wrapped.
@@ -123,6 +127,8 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 						// lgp is the latest.
 						lgp = seqno
 					}
+				case pkt.seqno < next:
+					pkt.Reclaim()
 
 				}
 			}

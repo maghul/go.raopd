@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"sync"
 )
 
 const max_rtp_packet_size = 1800
@@ -19,17 +20,23 @@ type rtpPacket struct {
 	buf     []byte
 }
 
-func makeRtpPacket() *rtpPacket {
+var rtpPacketPoolCounter = 0
+var rtpPacketPool = &sync.Pool{New: func() interface{} {
+	rtpPacketPoolCounter++
+	fmt.Println("RTP PACKET POOL: Created ", rtpPacketPoolCounter, " RTP packets in pool")
 	return &rtpPacket{0, nil, make([]byte, max_rtp_packet_size)}
+}}
+
+func makeRtpPacket() *rtpPacket {
+	return rtpPacketPool.Get().(*rtpPacket)
+}
+
+func (pkt *rtpPacket) Reclaim() {
+	rtpPacketPool.Put(pkt)
 }
 
 func (pkt *rtpPacket) payloadType() uint8 {
 	return pkt.content[1] & 0x7f
-}
-
-func (pkt *rtpPacket) Reclaim() {
-	// NYI: TODO: This is intended to be used for pooling rtp packets
-	// instead of recreating them.
 }
 
 type rtp net.UDPConn

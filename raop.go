@@ -185,6 +185,7 @@ func (r *raop) handleAudioPacket(pkt *rtpPacket) {
 	r.mode.CryptBlocks(ciphertext, ciphertext)
 
 	n := r.alac.Decode(pkt.content[12:], r.audioBuffer)
+	pkt.Reclaim()
 
 	of := r.plc.AudioWriter()
 	if of != nil {
