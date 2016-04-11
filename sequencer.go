@@ -138,15 +138,15 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 		next := uint16(0)
 		long := time.Duration(365 * 24 * time.Hour)
 		short := time.Duration(10 * time.Millisecond) // 10 mS
-		timeout := long
+		timer := time.NewTimer(long)
 
 		for {
 		gather:
 			for {
 				if len(recovery) > 0 {
-					timeout = short
+					timer.Reset(short)
 				} else {
-					timeout = long
+					timer.Reset(long)
 				}
 				select {
 				case gapseqno := <-gap:
@@ -173,7 +173,6 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 
 						}
 					}
-					timeout = time.Duration(1000000) // 1uS
 
 					//				case recseqno := <- recovered:
 					//					recovery[recseqno]  // Flag as recovered
@@ -187,9 +186,8 @@ func startSequencer(data chan *rtpPacket, out func(pkt *rtpPacket), request chan
 				case <-s.req: // Flush
 					recovery = make(map[uint16]int)
 					next = 0
-					timeout = long
 
-				case <-time.After(timeout):
+				case <-timer.C:
 					break gather
 				}
 
