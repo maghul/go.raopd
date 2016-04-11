@@ -32,6 +32,7 @@ type raop struct {
 	dacp                  *dacp
 	rtsp                  *rtspServer
 	data, control, timing *rtp
+	remote                net.IP
 
 	seqchan   chan *rtpPacket
 	rrchan    chan rerequest
@@ -88,19 +89,25 @@ func (r *rtspHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-func (r *raop) startRtp() {
+func (r *raop) startRtp(controlAddr, timingAddr *net.UDPAddr) {
 	fmt.Println("startRtp...")
 	r.seqchan = make(chan *rtpPacket, 256)
 	r.rrchan = make(chan rerequest, 128)
 	r.sequencer = startSequencer(r.seqchan, r.handleAudioPacket, r.rrchan)
 	if r.control == nil {
-		r.control = startRtp(r.getControlHandler)
-		r.data = startRtp(r.getDataHandler)
-		r.timing = startRtp(r.getTimingHandler)
+		r.control = startRtp(r.getControlHandler, controlAddr)
+		r.data = startRtp(r.getDataHandler, nil)
+		r.timing = startRtp(r.getTimingHandler, timingAddr)
 	}
 }
 
-func (r *raop) initAlac(remote, rtpmap, fmtpstr string) {
+func (r *raop) setRemote(remote string) error {
+	var err error
+	r.remote, err = cToIP(remote)
+	return err
+}
+
+func (r *raop) initAlac(rtpmap, fmtpstr string) {
 	r.alacConf = alac.NewAlacConfFromFmtp(fmtpstr)
 	r.alac = alac.NewAlacDecoder(r.alacConf)
 }

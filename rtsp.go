@@ -191,7 +191,13 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 		rtsplog.Debug.Println("RAOP AESKEY=", rs.raop.aeskey)
-		rs.raop.initAlac(remote, rtpmap, fmtp)
+		err = rs.raop.setRemote(remote)
+		if err != nil {
+			rtsplog.Info.Println("Could not set remote:", err)
+			rw.WriteHeader(500)
+			return
+		}
+		rs.raop.initAlac(rtpmap, fmtp)
 
 	case "SETUP":
 		raop := rs.raop
@@ -200,10 +206,26 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 
 		session := "DEADBEEF"
 
-		rs.raop.startRtp()
-		transport := fmt.Sprintf("RTP/AVP/UDP;unicast;mode=record;timing_port=%d;events;control_port=%d;server_port=%d\nSession: %s",
-			raop.timing.Port(), raop.control.Port(), raop.data.Port(), session)
-		h.Add("Transport", transport)
+		controlPort, timingPort, err := getPortsFromTransport(req.Header.Get("Transport"))
+		if err != nil {
+			rw.WriteHeader(400)
+			return
+		}
+		zone := "eth0" // TODO: This we need to get from somewhere!
+		controlAddr := &net.UDPAddr{IP: raop.remote, Port: controlPort, Zone: zone}
+		timingAddr := &net.UDPAddr{IP: raop.remote, Port: timingPort, Zone: zone}
+
+		err = rs.raop.startRtp(controlAddr, timingAddr)
+		if err == nil {
+			transport := fmt.Sprintf("RTP/AVP/UDP;unicast;mode=record;timing_port=%d;events;control_port=%d;server_port=%d\nSession: %s",
+				raop.timing.Port(), raop.control.Port(), raop.data.Port(), session)
+			h.Add("Transport", transport)
+		} else {
+			rtsplog.Info().Println("Failed to start RTP: ", err)
+			h.Add("FailureCause", err.Error())
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
 	case "GET_PARAMETER":
 		fmt.Println("GET_PARAMETER")

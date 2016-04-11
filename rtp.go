@@ -10,7 +10,7 @@ import (
 const max_rtp_packet_size = 1800
 
 type rtpHandler func(pkt *rtpPacket)
-type rtpTransmitter func(conn *net.UDPConn, addrchan chan *net.UDPAddr)
+type rtpTransmitter func(conn *net.UDPConn)
 type rtpFactory func() (rtpHandler, rtpTransmitter, string)
 
 type rtpPacket struct {
@@ -79,12 +79,10 @@ func (r *raop) getControlHandler() (rtpHandler, rtpTransmitter, string) {
 			pkt.Reclaim()
 		}
 	}
-	tx := func(conn *net.UDPConn, addrchan chan *net.UDPAddr) {
+	tx := func(conn *net.UDPConn) {
 		buf := make([]byte, 32)
 		seqno := uint16(1)
 		//		timestamp := uint32(1)
-		client := <-addrchan
-		fmt.Println("CONTROL CHANNEL CLIENT:", client)
 
 		for {
 			select {
@@ -95,10 +93,9 @@ func (r *raop) getControlHandler() (rtpHandler, rtpTransmitter, string) {
 				binary.BigEndian.PutUint16(buf[2:4], seqno)
 				binary.BigEndian.PutUint16(buf[4:6], rr.first)
 				binary.BigEndian.PutUint16(buf[6:8], rr.count)
-				conn.WriteToUDP(buf[0:8], client)
-				fmt.Println("CONTROL CHANNEL: Recovery Request:", rr, "sent to", client)
-			case client = <-addrchan:
-				fmt.Println("CONTROL CHANNEL: client=", client)
+
+				conn.Write(buf[0:8])
+				fmt.Println("CONTROL CHANNEL: Recovery Request:", rr, "sent to", conn.RemoteAddr())
 			}
 			seqno++
 		}
@@ -121,36 +118,58 @@ func sameUDPAddr(a, b *net.UDPAddr) bool {
 	}
 }
 
-func startRtp(f rtpFactory) *rtp {
+func startRtp(f rtpFactory, raddr *net.UDPAddr) *rtp {
+	/*
+	   	as := fmt.Sprintf( ":%d", randomPort )
+	   	randomPort++
 
-	caddr, err := net.ResolveUDPAddr("udp", ":0")
-	if err != nil {
-		panic("Could not resolve UDP address ':0'")
-	}
-	conn, err := net.ListenUDP("udp", caddr)
-	if err != nil {
-		panic("Could not listen to UDP address ':0'")
-	}
+	   	caddr, err := net.ResolveUDPAddr("udp", as)
+	   	if err != nil {
+	   		panic("Could not resolve UDP address ':0'")
+	   	}
 
-	claddr := conn.LocalAddr()
+	   	conn, err := net.ListenUDP("udp", caddr)
+	   	if err != nil {
+	   		panic(fmt.Sprintf("Could not listenl UDP local=%v: %v", caddr, err))
+	   	}
+	   //	claddr := conn.LocalAddr()
+
+	   	laddr, err := net.ResolveUDPAddr("udp",":48123")
+	   	if err != nil {
+	   		panic(fmt.Sprintf("Could not dial UDP  remote=%v: %v", raddr, err))
+	   	}
+	*/
+
+	var conn *net.UDPConn
+	var err error
+
+	if raddr == nil {
+		fmt.Println("LISTENING")
+		conn, err = net.ListenUDP("udp", nil)
+	} else {
+		fmt.Println("DIALING raddr=", raddr)
+		conn, err = net.DialUDP("udp", nil, raddr)
+	}
+	if err != nil {
+		panic(fmt.Sprintf("Could not dial UDP  remote=%v: %v", raddr, err))
+	}
 
 	handler, tx, name := f()
-	fmt.Println("Starting RTP server ", name, "at", claddr)
-	var addrchan chan *net.UDPAddr
-	if tx != nil {
-		addrchan = make(chan *net.UDPAddr)
-	}
+	fmt.Println("Starting RTP server ", name, "at conn l:", conn.LocalAddr(), ", r:", conn.RemoteAddr())
+	/*
+		var addrchan chan *net.UDPAddr
+		if tx != nil {
+			addrchan = make(chan *net.UDPAddr)
+		}
+	*/
 	if handler != nil {
 		go func() {
 			defer func() { conn.Close() }()
-			paddr := (*net.UDPAddr)(nil)
 			for {
 				pkt := makeRtpPacket()
-				n, addr, err := conn.ReadFromUDP(pkt.buf)
-				if addrchan != nil && !sameUDPAddr(addr, paddr) {
-					addrchan <- addr
-					paddr = addr
-				}
+				var n int
+				var err error
+				n, err = conn.Read(pkt.buf)
 				if err != nil {
 					fmt.Println("Panic err=", err)
 					return // Exit RTP server
@@ -163,7 +182,7 @@ func startRtp(f rtpFactory) *rtp {
 		}()
 	}
 	if tx != nil {
-		go tx(conn, addrchan)
+		go tx(conn)
 		tx = nil
 	}
 	return (*rtp)(conn)

@@ -234,7 +234,7 @@ User-Agent: AirPlay/267.3
 
 `
 	r := makeTestRtspSession()
-	r.raop.startRtp()
+	r.raop.startRtp(nil, nil)
 
 	resp, err := request(r, req)
 
