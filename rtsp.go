@@ -211,7 +211,14 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 			rw.WriteHeader(400)
 			return
 		}
-		zone := "eth0" // TODO: This we need to get from somewhere!
+		local := req.URL.Host
+		fmt.Println("LOCAL IS ", local)
+		zone, err := interfaceNameFromHost(local)
+		if err != nil {
+			fmt.Println("Could not find interface from host=", local, ", :", err)
+			rw.WriteHeader(400)
+			return
+		}
 		controlAddr := &net.UDPAddr{IP: raop.remote, Port: controlPort, Zone: zone}
 		timingAddr := &net.UDPAddr{IP: raop.remote, Port: timingPort, Zone: zone}
 

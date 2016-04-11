@@ -225,18 +225,28 @@ a=max-latency:88200
 }
 
 func TestSetup(t *testing.T) {
-	req := `SETUP rtsp://fe80::461e:a1ff:fece:f4a9/9953613529495192746 RTSP/1.0
+
+	ifaces, err := net.Interfaces()
+	assert.NoError(t, err)
+	iface := ifaces[0]
+	addrs, err := iface.Addrs()
+	assert.NoError(t, err)
+	addr := addrs[0]
+	req := fmt.Sprintf(`SETUP rtsp://%s/9953613529495192746 RTSP/1.0
 Transport: RTP/AVP/UDP;unicast;mode=record;timing_port=53595;control_port=54411
 CSeq: 2
 DACP-ID: 19050F2FE0FD618D
 Active-Remote: 84694584
 User-Agent: AirPlay/267.3
 
-`
+`, addr)
+	Debug("log.info/*", 1)
+	Debug("log.debug/*", 1)
 	r := makeTestRtspSession()
 	r.raop.startRtp(nil, nil)
 
 	resp, err := request(r, req)
+	assert.NoError(t, err)
 
 	expected := fmt.Sprintf("RTP/AVP/UDP;unicast;mode=record;timing_port=%d;events;control_port=%d;server_port=%d\nSession: DEADBEEF",
 		r.raop.timing.Port(), r.raop.control.Port(), r.raop.data.Port())
