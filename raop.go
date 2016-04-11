@@ -91,9 +91,11 @@ func (r *rtspHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (r *raop) startRtp(controlAddr, timingAddr *net.UDPAddr) {
 	fmt.Println("startRtp...")
-	r.seqchan = make(chan *rtpPacket, 256)
-	r.rrchan = make(chan rerequest, 128)
-	r.sequencer = startSequencer(r.seqchan, r.handleAudioPacket, r.rrchan)
+	if (r.seqchan==nil) {
+		r.seqchan = make(chan *rtpPacket, 256)
+		r.rrchan = make(chan rerequest, 128)
+		r.sequencer = startSequencer(r.seqchan, r.handleAudioPacket, r.rrchan)
+	}
 	if r.control == nil {
 		r.control = startRtp(r.getControlHandler, controlAddr)
 		r.data = startRtp(r.getDataHandler, nil)
@@ -116,6 +118,10 @@ func (r *raop) teardown() {
 	fmt.Println("What do I need to teardown actually?")
 	r.plc.Close()
 	r.sequencer.flush()
+	r.data.Close()
+	r.control.Close()
+	r.timing.Close()
+	r.control = nil
 }
 
 func (r *raop) close() {
@@ -123,6 +129,7 @@ func (r *raop) close() {
 	r.data.Close()
 	r.control.Close()
 	r.timing.Close()
+	r.control = nil
 }
 
 func (r *raop) getParameter(name string) string {
