@@ -28,28 +28,20 @@ func inSeqs(in chan *rtpPacket, va ...interface{}) {
 }
 
 func checkSeqNo(t *testing.T, q chan *rtpPacket, expected int) {
-	if debugSequencer {
-		fmt.Println("CHECK SEQNO expected=", expected)
-	}
+	debug("CHECK SEQNO expected=", expected)
 	select {
 	case p := <-q:
-		if debugSequencer {
-			fmt.Println("CHECK SEQNO received=", p.seqno)
-		}
+		debug("CHECK SEQNO received=", p.seqno)
 		assert.NotEqual(t, -1, expected, fmt.Sprintf("Queue should be empty, contained packet with seqno=%d", p.seqno))
 		assert.Equal(t, uint16(expected), p.seqno)
 	case <-time.After(time.Millisecond * 1):
-		if debugSequencer {
-			fmt.Println("CHECK SEQNO  *empty*")
-		}
+		debug("CHECK SEQNO  *empty*")
 		assert.Equal(t, -1, expected, fmt.Sprintf("Queue is empty, should contain packet with seqno=%d", expected))
 	}
 }
 
 func checkSeqNos(t *testing.T, q chan *rtpPacket, from, to int) {
-	if debugSequencer {
-		fmt.Println("CHECK SEQNO from=", from, ", to=", to)
-	}
+	debug("CHECK SEQNO from=", from, ", to=", to)
 	for ii := from; ii <= to; ii++ {
 		checkSeqNo(t, q, ii)
 	}
@@ -57,24 +49,16 @@ func checkSeqNos(t *testing.T, q chan *rtpPacket, from, to int) {
 }
 
 func checkReq(t *testing.T, q chan rerequest, expected, count int) {
-	if debugSequencer {
-		fmt.Println("CHECK REREQUEST", expected, "...", expected+count-1)
-	}
+	debug("CHECK REREQUEST", expected, "...", expected+count-1)
 	select {
 	case r := <-q:
-		if debugSequencer {
-			fmt.Println("CHECK REREQUEST: received", r)
-		}
+		debug("CHECK REREQUEST: received", r)
 		assert.NotEqual(t, -1, expected, "Request Queue should be empty")
-		if debugSequencer {
-			fmt.Println("CHECK REREQUEST: ", expected, int(r.first))
-		}
+		debug("CHECK REREQUEST: ", expected, int(r.first))
 		assert.Equal(t, expected, int(r.first))
 		assert.Equal(t, count, int(r.count))
 	case <-time.After(time.Millisecond * 1):
-		if debugSequencer {
-			fmt.Println("CHECK REREQUEST: *empty")
-		}
+		debug("CHECK REREQUEST: *empty")
 		msg := fmt.Sprintf("Request was empty, should contain [%d...%d]", expected, expected+count-1)
 		assert.Equal(t, -1, expected, msg)
 	}
@@ -91,7 +75,7 @@ func testPacket(seqno uint16, payloadType uint8) *rtpPacket {
 }
 
 func TestSequenceConsecutive(t *testing.T) {
-	fmt.Println("TestSequenceConsecutive")
+	debug("TestSequenceConsecutive")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -99,7 +83,7 @@ func TestSequenceConsecutive(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	startSequencer(in, of, request)
+	s := startSequencer(in, of, request)
 
 	in <- testPacket(4, 0)
 	in <- testPacket(5, 0)
@@ -113,10 +97,11 @@ func TestSequenceConsecutive(t *testing.T) {
 	checkSeqNo(t, out, -1)
 	checkReq(t, request, -1, 0)
 
+	s.close()
 }
 
 func TestSequenceSingleGap(t *testing.T) {
-	fmt.Println("TestSequenceSingleGap")
+	debug("TestSequenceSingleGap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -124,7 +109,7 @@ func TestSequenceSingleGap(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	startSequencer(in, of, request)
+	s := startSequencer(in, of, request)
 
 	in <- testPacket(4, 0)
 	in <- testPacket(6, 0)
@@ -138,10 +123,11 @@ func TestSequenceSingleGap(t *testing.T) {
 	checkSeqNo(t, out, -1)
 	checkReq(t, request, -1, 0)
 
+	s.close()
 }
 
 func TestSequenceDoubleGap(t *testing.T) {
-	fmt.Println("TestSequenceDoublegap")
+	debug("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -149,7 +135,7 @@ func TestSequenceDoubleGap(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	startSequencer(in, of, request)
+	s := startSequencer(in, of, request)
 
 	in <- testPacket(4, 0)
 	in <- testPacket(7, 0)
@@ -163,10 +149,11 @@ func TestSequenceDoubleGap(t *testing.T) {
 	checkSeqNo(t, out, -1)
 	checkReq(t, request, -1, 0)
 
+	s.close()
 }
 
 func TestSequenceWideGap(t *testing.T) {
-	fmt.Println("TestSequenceDoublegap")
+	debug("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -174,7 +161,7 @@ func TestSequenceWideGap(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	startSequencer(in, of, request)
+	s := startSequencer(in, of, request)
 
 	inSeqs(in, []int{46542, 46544})
 	// gap 46545..46553
@@ -203,21 +190,20 @@ func TestSequenceWideGap(t *testing.T) {
 	checkReq(t, request, 46546, 1)
 	checkReq(t, request, -1, 0)
 
+	s.close()
 }
 
 func TestSequenceReReRequest(t *testing.T) {
-	fmt.Println("TestSequenceDoublegap")
+	debug("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
 
 	of := func(pkt *rtpPacket) {
-		if debugSequencer {
-			fmt.Println("       OUT PACKET=", pkt.seqno)
-		}
+		debug("       OUT PACKET=", pkt.seqno)
 		out <- pkt
 	}
-	startSequencer(in, of, request)
+	s := startSequencer(in, of, request)
 
 	inSeqs(in, []int{46542, 46544})
 	// gap 46545..46553
@@ -252,4 +238,12 @@ func TestSequenceReReRequest(t *testing.T) {
 	checkReq(t, request, 46560, 9)
 	checkReq(t, request, -1, 0)
 
+	s.close()
+}
+
+func TestSequenceSeqNo(t *testing.T) {
+	assert.Equal(t, 0, seqnoDelta(4711, 4711))
+	assert.Equal(t, 1, seqnoDelta(4712, 4711))
+	assert.Equal(t, -1, seqnoDelta(4711, 4712))
+	assert.Equal(t, 16, seqnoDelta(10, 65530))
 }
