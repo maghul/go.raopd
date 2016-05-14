@@ -60,3 +60,8 @@ func TestIPv6Authentication2(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
+func TestAuthIPv4Shairplay(t *testing.T) {
+	expected := "wjTaHnZondBktQ7v9PjwoOLtA2kiS9IHl7zouRkFcsREejtAdR/FgcoCWmHSTCysnNmDQhWUAhkcNHloRA6K+Tw+0J2Xv3wg8nfPgiKxcHSqQpVwzKACsh8/7ssBO0hY6E60RbIO2N6pJJqgTj9Xiyd6UMrLMPNFMjgpJt/sDCuUwS8c62yHqu2X6Fhe7vJNGxYAMwCkZIFFwc8U0H3OK5QiWPs4yap9qwL6dEVjmf8BCkZZtUoPDGHsDC9MynJDFAotT7eHUYjbSJkt7boQvr0dIG7zTR4X8vNk9tkWbLdw8GjI966wTiCtf1Xde1nCk92pk2LurHl1JXcKDpKDgg"
+	result := checkSign(t, "10.223.10.110", "48:5D:60:7C:EE:22", "az5FIXrxftZarFq0tav2/A==", 6)
+	assert.Equal(t, expected, result)
+}
