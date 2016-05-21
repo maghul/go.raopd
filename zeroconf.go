@@ -32,6 +32,12 @@ func init() {
 	go runResolver(requestChan)
 }
 
+func (b *bonjourRecord) String() string {
+	return fmt.Sprintf("BonjourRecord{%s,%s,%s,%s:%d}",
+		b.serviceName, b.serviceType, b.serviceDomain, b.serviceHost, b.Port)
+
+}
+
 func getMyFQDN() string {
 	cmd := exec.Command("/bin/hostname", "-f")
 	var out bytes.Buffer
