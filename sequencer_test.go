@@ -256,6 +256,64 @@ func TestSequenceReReRequest(t *testing.T) {
 	s.close()
 }
 
+func TestSequenceSlowResponse(t *testing.T) {
+	seqlog.Debug().Println("TestSequenceDoublegap")
+	in := make(chan *rtpPacket, 10)
+	out := make(chan *rtpPacket, 10)
+	request := make(chan rerequest, 10)
+
+	of := func(pkt *rtpPacket) {
+		out <- pkt
+	}
+	s := startSequencer(in, of, request)
+
+	inSeqs(in, []int{46542, 46544})
+	inSeqs(in, []int{46547, 46554})
+
+	checkSeqNos(t, out, 46542, 46544)
+	time.Sleep(11 * time.Millisecond)
+
+	// These are packets coming from the normal data RTP session and should
+	// not retrigger a request which is already pending.
+	inSeqs(in, []int{46555, 46556})
+	time.Sleep(11 * time.Millisecond)
+
+	checkReq(t, request, 46545, 2)
+	// We should only have a single rerequest here
+	checkReq(t, request, -1, 0)
+
+	s.close()
+}
+
+func TestSequenceMissingRecoveryPacket(t *testing.T) {
+	seqlog.Debug().Println("TestSequenceDoublegap")
+	in := make(chan *rtpPacket, 10)
+	out := make(chan *rtpPacket, 10)
+	request := make(chan rerequest, 10)
+
+	of := func(pkt *rtpPacket) {
+		out <- pkt
+	}
+	s := startSequencer(in, of, request)
+
+	inSeqs(in, []int{46542, 46544})
+	inSeqs(in, []int{46547, 46554})
+
+	checkSeqNos(t, out, 46542, 46544)
+	time.Sleep(11 * time.Millisecond)
+
+	// This packet is a recovery but 46545 is still missing so we should
+	// get a new request for that.
+	inSeqs(in, 46546)
+	time.Sleep(11 * time.Millisecond)
+
+	checkReq(t, request, 46545, 2)
+	checkReq(t, request, 46545, 1)
+	checkReq(t, request, -1, 0)
+
+	s.close()
+}
+
 func TestSequenceSeqNo(t *testing.T) {
 	assert.Equal(t, 0, seqnoDelta(4711, 4711))
 	assert.Equal(t, 1, seqnoDelta(4712, 4711))
