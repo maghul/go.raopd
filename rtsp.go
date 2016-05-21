@@ -262,10 +262,12 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 	case "SET_PARAMETER":
 		rtsplog.Debug.Println("SET_PARAMETER")
 		contentType := req.Header["Content-Type"][0]
+		rtsplog.Debug().Println("SET_PARAMETER: Content-Type=", contentType)
 		switch contentType {
 		case "text/parameters":
 			s := readToString(req.Body)
 			s = strings.Trim(s, " \r\n")
+			rtsplog.Debug().Println("SET_PARAMETER: text/parameters: s=", s)
 			var vol float32
 			var start, current, end int64
 			switch {
@@ -276,6 +278,7 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 				rs.raop.setProgress(start, current, end)
 			}
 		case "image/jpeg", "image/png":
+			rtsplog.Debug().Println("SET_PARAMETER: image: ")
 			loadCoverArt := false
 			si := rs.raop.plc.ServiceInfo()
 			if si != nil {
