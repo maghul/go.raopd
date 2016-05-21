@@ -68,6 +68,7 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 
 		initial := true
 		next := uint16(0)
+		nextInputSeqno := uint16(0)
 
 		sendReRequests := func() {
 			entries := len(pkts)
@@ -171,21 +172,47 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 			case pkt := <-data:
 				seqno := pkt.seqno
 				delta := seqnoDelta(seqno, next)
+				indelta := seqnoDelta(seqno, nextInputSeqno)
 
 				switch {
 				case initial:
 					initial = false
+					delta = 0
+					indelta = 0
 					fallthrough
 
-				case delta == 0:
-					next = pkt.seqno + 1
+				case delta == 0: // In sequence. just output
+					next = seqno + 1
+					if indelta == 0 {
+						if sequencerDebug {
+							fmt.Println("DATA IN SEQUENCE: seqno=", seqno)
+						}
+						nextInputSeqno = next
+					} else {
+						if sequencerDebug {
+							fmt.Println("RECOVERY IN SEQUENCE: seqno=", seqno)
+						}
+					}
 					transmit(pkt)
 
-				case delta > 2000:
+				case delta > 2000: // Way ahead of whats being recovered
+					if sequencerDebug {
+						fmt.Println("TOO MUCH: seqno=", seqno)
+					}
 					fmt.Fprintln(os.Stderr, "SEQUENCER: Delta too large, ", delta, " flushing sequencer")
 					flush()
 
-				case delta > 0:
+				case indelta >= 0: // Just a normal data packet. Save it but don't remark old recovery requests.
+					if sequencerDebug {
+						fmt.Println("DATA AHEAD: seqno=", seqno)
+					}
+					pkts[seqno] = pkt
+					nextInputSeqno = seqno + 1
+
+				case delta > 0: // Recovery packet which is ahead of what we expected. Save it and remark old recovery requests prior to it.
+					if sequencerDebug {
+						fmt.Println("RECOVERY AHEAD: seqno=", seqno)
+					}
 					pkts[seqno] = pkt
 					for ii := next; ii < seqno; ii++ {
 						p, ok := pkts[ii]
