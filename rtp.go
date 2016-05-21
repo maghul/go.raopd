@@ -59,10 +59,32 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 			pkt.Reclaim()
 
 		case 86:
-			pkt.content = pkt.content[4:]
-			pkt.seqno = binary.BigEndian.Uint16(pkt.content[2:4])
-			rtplog.Debug.Println(prefix, "Recovery Packet, seqno=", pkt.seqno)
-			r.seqchan <- pkt
+			base := pkt.content
+			status := pkt.seqno // Seqno is actuall some kind of status.
+			if status == 1 {
+				// It seems that status==1 means that the retransmission won't happen
+				// We could keep track of the rerequests and zap them but it is easier to
+				// flush the sequencer.
+				failedSeqno := binary.BigEndian.Uint16(pkt.content[4:6])
+				zero := binary.BigEndian.Uint16(pkt.content[6:8])
+				rtplog.Debug.Println(prefix, "NO Resend for ", failedSeqno)
+				if zero != 0 {
+					rtplog.Info.Println(prefix, "Resend fail assertion error, zero=", zero)
+				}
+				pkt.Reclaim()
+				r.sequencer.flush()
+			} else {
+				pkt.content = pkt.content[4:]
+				pkt.seqno = binary.BigEndian.Uint16(pkt.content[2:4])
+				rtplog.Debug.Printf("%sRecovery Packet, status=%d, seqno=%d", prefix, status, pkt.seqno)
+				if base[4] != 0x80 && base[5] != 0x60 {
+					l := len(base)
+					if l > 20 {
+						l = 20
+					}
+				}
+				r.seqchan <- pkt
+			}
 
 		default:
 			rtplog.Debug.Println(prefix, "Unknown payload type ", pkt.payloadType())
