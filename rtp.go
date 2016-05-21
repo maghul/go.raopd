@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"emh/logger"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net"
 )
@@ -82,6 +83,7 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 					if l > 20 {
 						l = 20
 					}
+					rtplog.Debug.Println(prefix, " Unknown Recovery Packet: ", hex.Dump(base[0:l]))
 				}
 				r.seqchan <- pkt
 			}
