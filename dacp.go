@@ -10,6 +10,7 @@ import (
 )
 
 type dacp struct {
+	sink Sink
 	id   string
 	ar   string
 	req  *zeroconfResolveRequest
@@ -20,10 +21,11 @@ type dacp struct {
 
 var dacplog = logger.GetLogger("raopd.dacp")
 
-func newDacp() *dacp {
+func newDacp(sink Sink) *dacp {
 	d := &dacp{}
 	d.mrc = make(chan func() error)
 	d.crc = make(chan func() error, 12)
+	d.sink = sink
 	go d.runDacp()
 	return d
 }
@@ -116,7 +118,6 @@ func (d *dacp) runDacp() {
 
 		switch {
 		case d.req == nil:
-			dacplog.Debug.Println("runDacp: event wait: d.req=nil")
 			select {
 			case dr := <-d.mrc:
 				err = dr()
@@ -132,6 +133,7 @@ func (d *dacp) runDacp() {
 			case rr := <-d.req.result:
 				dacplog.Debug.Println("DACP RR=", rr)
 				d.addr = rr.addr
+				d.sink.Connected(rr.name)
 			}
 		default:
 			dr := <-d.mrc

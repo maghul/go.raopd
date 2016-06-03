@@ -42,6 +42,9 @@ type Sink interface {
 	// Get the service info for the service.
 	Info() *SinkInfo
 
+	// Called when a source has connected
+	Connected(name string)
+
 	// Get a writer for the audio stream. Only raw PCM with two channel
 	// 16-bit depth at 44100 samples/second is currently supported.
 	//	AudioWriter() io.Writer

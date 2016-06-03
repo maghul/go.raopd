@@ -174,6 +174,7 @@ type zeroconfResolveRequest struct {
 }
 
 type zeroconfResolveReply struct {
+	name string
 	addr *net.TCPAddr
 	txt  []string
 }
@@ -256,8 +257,9 @@ func runResolver(requestChan chan reqFunc) {
 					//					ipp := fmt.Sprintf("%s:%d", s.Body[7], s.Body[8])
 					addr, err := toTCPAddr(toString(s.Body[7]), toString(s.Body[8]))
 					txt := toStringArray(s.Body[9].([][]byte))
+					name := toString(s.Body[5])
 					if err == nil {
-						req.result <- &zeroconfResolveReply{addr, txt}
+						req.result <- &zeroconfResolveReply{name, addr, txt}
 					} else {
 						zconflog.Info.Println("Could not resolve address '", addr, "': ", err)
 					}

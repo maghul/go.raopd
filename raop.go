@@ -62,7 +62,7 @@ func (r *raop) startRtspProcess() (err error) {
 }
 
 func (r *raop) startRaopProcess() {
-	r.dacp = newDacp()
+	r.dacp = newDacp(r.sink)
 
 	r.vol = newVolumeHandler(r.sink.Info(), r.sink.SetVolume, r.dacp.tx)
 
