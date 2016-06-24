@@ -8,12 +8,6 @@ import (
 AirplaySinkInfo contains data about the AirplaySink instance.
 */
 type SinkInfo struct {
-	// If the service supports absolute volume, 0 - 100
-	SupportsAbsoluteVolume bool
-
-	// If the service supports relative volume. UP=1000 and DOWN=-1000
-	SupportsRelativeVolume bool
-
 	// If the sink wants coverart. See SetCoverArt in AirplaySink
 	SupportsCoverArt bool
 

@@ -159,6 +159,21 @@ func (source *Source) Volume(vol float32) {
 	source.raop.vol.SetDeviceVolume(vol)
 }
 
+// VolumeMode will set the volume mode of the source device. If absolute
+// is false then the volume changes sent to SetVolume of the AirplaySink
+// interface will be relative, i.e. up and down volume commands. This is done
+// by setting the volume slider on the source device to middle position and check
+// if it is dragged right (volume up) or dragged left (volume down). Also the
+// volume up/down buttons on the source device will send volume up/down commands
+// to SetVolume.
+//
+// If absolute is true then the volume sent to SetVolume will be in the range 0..100.
+// and the volume slider will reflect the volume send using the Volume function
+// in AirplaySource.
+func (source *Source) VolumeMode(absolute bool) {
+	source.raop.vol.VolumeMode(absolute)
+}
+
 // NewAudioStream will start a new audio output stream for the source.
 // Only raw PCM with two channel
 // 16-bit depth at 44100 samples/second is currently supported.
