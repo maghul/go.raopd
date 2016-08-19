@@ -90,7 +90,7 @@ func (r *raop) startRtp(controlAddr, timingAddr *net.UDPAddr) (err error) {
 	if r.seqchan == nil {
 		r.seqchan = make(chan *rtpPacket, 256)
 		r.rrchan = make(chan rerequest, 128)
-		r.sequencer = startSequencer(r.seqchan, r.handleAudioPacket, r.rrchan)
+		r.sequencer = startSequencer(r.hwaddr.String(), r.seqchan, r.handleAudioPacket, r.rrchan)
 	}
 	if r.control == nil {
 		r.control, err = startRtp(r.getControlHandler, controlAddr)

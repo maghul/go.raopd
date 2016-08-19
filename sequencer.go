@@ -12,6 +12,7 @@ var seqlog = logger.GetLogger("raopd.sequencer")
 type sequencer struct {
 	// Control channel
 	control chan int
+	ref     string
 
 	// Internally used
 	low     seqno
@@ -73,6 +74,12 @@ func (m *sequencer) flushCached(sn seqno, outf func(pkt *rtpPacket)) {
 	m.low = sn
 }
 
+func (m *sequencer) logOut(sn seqno) {
+	if sn%1000 == 0 {
+		seqlog.Debug.Println(m.ref, " sequencer::logOut: output sequence number=", sn)
+	}
+}
+
 // handle an incoming packet.
 // If in sequence then just output it
 // If too new (i.e. a gap exists) cache it.
@@ -90,14 +97,20 @@ func (m *sequencer) handle(pkt *rtpPacket, outf func(pkt *rtpPacket)) {
 			seqlog.Debug.Println(m.ref, " sequencer::handle: Initial seqno=", sn)
 		}
 	}
+	if m.retries[sn] > 0 {
+		seqlog.Debug.Println(m.ref, " sequencer::handle: Filled gap", sn)
 	}
 	delete(m.retries, sn)
 	if m.low == sn {
+		m.logOut(sn)
 		outf(pkt)
 		m.flushCached(sn+1, outf)
 	} else if seqnoDelta(sn, m.low) < 0 {
-		seqlog.Debug.Println("sequencer::handle: too old packet", sn)
+		seqlog.Debug.Println(m.ref, " sequencer::handle: too old packet", sn)
 	} else {
+		if !m.inRecovery() {
+			seqlog.Debug.Println(m.ref, " sequencer::handle: starting recovery on packet=", sn, ", low=", m.low)
+		}
 		m.packets[sn] = pkt
 	}
 }
@@ -143,6 +156,7 @@ func (m *sequencer) sendReRequests(request chan rerequest) {
 			switch retry {
 			case 1, 4, 9: // Send rerequest at 10ms, 40ms, and 90ms
 				rr := &rerequest{start, count}
+				seqlog.Debug.Println(m.ref, " sequencer::sendReRequest: rerequest=", rr)
 				request <- *rr
 			case 15: // Well I don't think we'll get any packets after 150 ms
 				m.remove(start, count)
@@ -163,11 +177,12 @@ func (m *sequencer) remove(start, count seqno) {
 }
 
 // Start a sequence in a goroutine.
-func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request chan rerequest) *sequencer {
+func startSequencer(ref string, data chan *rtpPacket, outf func(pkt *rtpPacket), request chan rerequest) *sequencer {
 
 	m := &sequencer{}
 	m.control = make(chan int, 0)
 	m.restartSequencer()
+	m.ref = ref
 
 	timeout := time.Duration(10 * time.Millisecond) // 10 mS
 	timer := time.NewTimer(timeout)
@@ -206,8 +221,10 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 		command:
 			switch cmd {
 			case 0:
+				seqlog.Debug.Println(m.ref, " Restarting Sequencer")
 				m.restartSequencer()
 			case 1:
+				seqlog.Debug.Println(m.ref, " Shutting down Sequencer")
 				return
 			}
 

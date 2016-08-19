@@ -99,7 +99,7 @@ func TestSequenceConsecutive(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	s := startSequencer(in, of, request)
+	s := startSequencer("test", in, of, request)
 
 	in <- testPacket(4, 0)
 	in <- testPacket(5, 0)
@@ -125,7 +125,7 @@ func TestSequenceSingleGap(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	s := startSequencer(in, of, request)
+	s := startSequencer("test", in, of, request)
 
 	in <- testPacket(4, 0)
 	in <- testPacket(6, 0)
@@ -151,7 +151,7 @@ func TestSequenceDoubleGap(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	s := startSequencer(in, of, request)
+	s := startSequencer("test", in, of, request)
 
 	in <- testPacket(4, 0)
 	in <- testPacket(7, 0)
@@ -177,7 +177,7 @@ func TestSequenceWideGap(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	s := startSequencer(in, of, request)
+	s := startSequencer("test", in, of, request)
 
 	inSeqs(in, []int{46542, 46544})               // 46542..46544
 	inSeqs(in, 46554, 46549, []int{46555, 46559}) // 46542..46544 46549 46554..46559
@@ -217,7 +217,7 @@ func TestSequenceReReRequest(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	s := startSequencer(in, of, request)
+	s := startSequencer("test", in, of, request)
 
 	inSeqs(in, []int{46542, 46544})
 	// gap 46545..46553
@@ -267,7 +267,7 @@ func NoTestSequenceSlowResponse(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	s := startSequencer(in, of, request)
+	s := startSequencer("test", in, of, request)
 
 	inSeqs(in, []int{46542, 46544})
 	inSeqs(in, []int{46547, 46554})
@@ -296,7 +296,7 @@ func TestSequenceMissingRecoveryPacket(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	s := startSequencer(in, of, request)
+	s := startSequencer("test", in, of, request)
 
 	inSeqs(in, []int{46542, 46544})
 	inSeqs(in, []int{46547, 46554})
@@ -325,7 +325,7 @@ func TestSequenceGiveUp(t *testing.T) {
 	of := func(pkt *rtpPacket) {
 		out <- pkt
 	}
-	s := startSequencer(in, of, request)
+	s := startSequencer("test", in, of, request)
 
 	inSeqs(in, []int{46542, 46544}) // 46542..46544
 	inSeqs(in, []int{46547, 46554}) // 46542..46544  46547..46554
