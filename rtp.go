@@ -36,6 +36,7 @@ func (r *raop) getDataHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter, s
 	prefix := fmt.Sprint("DATA:", raddr, ": ")
 	return func(pkt *rtpPacket) {
 		if pkt.payloadType() == 96 {
+			pkt.recovery = false
 			r.seqchan <- pkt
 		} else {
 			rtplog.Debug.Println(prefix, " unknown payload type ", pkt.payloadType())
@@ -76,6 +77,7 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 			} else {
 				pkt.content = pkt.content[4:]
 				pkt.sn = decodeSeqno(pkt.content[2:4])
+				pkt.recovery = true
 				rtplog.Debug.Println(prefix, "Recovery Packet, status=", status, ", seqno=", pkt.sn)
 				if base[4] != 0x80 && base[5] != 0x60 {
 					l := len(base)

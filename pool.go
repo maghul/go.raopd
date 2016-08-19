@@ -7,13 +7,14 @@ import (
 )
 
 type rtpPacket struct {
-	sn      seqno
-	content []byte
-	buf     []byte
+	sn       seqno
+	content  []byte
+	buf      []byte
+	recovery bool
 }
 
 var rtpPacketPool = &sync.Pool{New: func() interface{} {
-	return &rtpPacket{0, nil, make([]byte, max_rtp_packet_size)}
+	return &rtpPacket{0, nil, make([]byte, max_rtp_packet_size), false}
 }}
 
 func makeRtpPacket() *rtpPacket {

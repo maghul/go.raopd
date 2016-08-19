@@ -81,9 +81,15 @@ func (m *sequencer) handle(pkt *rtpPacket, outf func(pkt *rtpPacket)) {
 	sn := pkt.sn
 
 	if !m.lowd {
-		m.lowd = true
-		m.low = sn
-		seqlog.Debug.Println("sequencer::handle: Initial seqno=", sn)
+		if pkt.recovery {
+			// Ignore recovery packets if the sequencer has been restarted
+			return
+		} else {
+			m.lowd = true
+			m.low = sn
+			seqlog.Debug.Println(m.ref, " sequencer::handle: Initial seqno=", sn)
+		}
+	}
 	}
 	delete(m.retries, sn)
 	if m.low == sn {
