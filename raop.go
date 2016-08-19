@@ -126,10 +126,18 @@ func (r *raop) teardown() {
 
 func (r *raop) close() {
 	r.rtsp.Close()
-	r.sequencer.close()
-	r.data.Close()
-	r.control.Close()
-	r.timing.Close()
+	if r.sequencer != nil { // TODO: start sequence on init and let it lay dormant?
+		r.sequencer.close()
+	}
+	if r.data != nil {
+		r.data.Close()
+	}
+	if r.control != nil {
+		r.control.Close()
+	}
+	if r.timing != nil {
+		r.timing.Close()
+	}
 	r.control = nil
 }
 
