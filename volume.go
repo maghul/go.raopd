@@ -69,6 +69,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 
 	serviceVolume := float32(0)
 	targetVolume := float32(0)
+	ref := info.Name
 
 	volChange := func(up bool) {
 		if up {
@@ -78,11 +79,13 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 		}
 	}
 
+	mode := "Initial"
+
 	go func() {
 		absoluteMode := true
 		v.deviceVolume = <-v.deviceVolumeChan
 		serviceVolume = ios2decVolume(v.deviceVolume)
-		volumelog.Debug.Println("serviceVolume=", serviceVolume)
+		volumelog.Debug.Println(ref, ": serviceVolume=", serviceVolume)
 		for {
 		mode:
 			for {
@@ -90,25 +93,30 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 
 					// Absolute volume mode. Try to match the volume on the iDevice to the volume
 					// on the service by pushing volume up and down
+					mode = ":Absolute:Normal: "
+					volumelog.Debug.Println(ref, mode, " Starting")
 				normal:
 					for {
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume
 							serviceVolume = ios2decVolume(dVolume)
-							//volumelog.Debug.Println( "deviceVolume=", deviceVolume, ", serviceVolume=", serviceVolume )
+							volumelog.Debug.Println(ref, mode, "deviceVolume=", dVolume, ", serviceVolume=", serviceVolume)
 							setServiceVolume(serviceVolume)
 
 						case targetVolume = <-v.serviceVolumeChan:
-							//volumelog.Debug.Println( "targetVolume=", targetVolume )
+							volumelog.Debug.Println(ref, mode, "targetVolume=", targetVolume)
 							volChange(targetVolume > serviceVolume)
 							break normal
 
 						case absoluteMode = <-v.absoluteModeChan:
+							volumelog.Debug.Println(ref, mode, "switching mode: absoluteMode=", absoluteMode)
 							break mode
 						}
 					}
 
+					mode = ":Absolute:Recover: "
+					volumelog.Debug.Println(ref, mode, " Starting")
 				finder:
 					for {
 						select {
@@ -121,15 +129,16 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 								break finder
 							}
 
-							//volumelog.Debug.Println( "deviceVolume=", deviceVolume, ", targetVolume=", targetVolume, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+							volumelog.Debug.Println(ref, mode, "deviceVolume=", dVolume, ", targetVolume=", targetVolume, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume)
 							serviceVolume = newVolume
 							volChange(targetVolume > serviceVolume)
 
 						case targetVolume = <-v.serviceVolumeChan:
-							//volumelog.Debug.Println( "INTER targetVolume=", targetVolume )
+							volumelog.Debug.Println(ref, mode, "targetVolume=", targetVolume)
 							volChange(targetVolume > serviceVolume)
 
 						case absoluteMode = <-v.absoluteModeChan:
+							volumelog.Debug.Println(ref, mode, "switching mode: absoluteMode=", absoluteMode)
 							break mode
 						}
 					}
@@ -137,60 +146,66 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 					// Relative volume mode: Send up and down volume to the service while
 					// keeping the iDevice volume at the center.
 					if serviceVolume > 55 && serviceVolume < 45 {
-						volumelog.Debug.Println("------ KICK!")
+						volumelog.Debug.Println(ref, ": ------ KICK!")
 						volChange(50 > serviceVolume)
 					}
-					volumelog.Debug.Println("In relative volume normal mode")
+
+					mode = ":Relative:Normal: "
+					volumelog.Debug.Println(ref, mode, " Starting")
 				normal_r:
 					for {
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume
 							newVolume := ios2decVolume(dVolume)
-							//volumelog.Debug.Println( "nr: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+							//volumelog.Debug.Println(ref, ": nr: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+							volumelog.Debug.Println(ref, mode, "deviceVolume=", dVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume)
 
 							if newVolume > serviceVolume && newVolume > 50 {
-								volumelog.Debug.Println("VOLUME UP")
+								volumelog.Debug.Println(ref, mode, "VOLUME UP")
 								setServiceVolume(1000)
 							}
 
 							if newVolume < serviceVolume && newVolume < 50 {
-								volumelog.Debug.Println("VOLUME DOWN")
+								volumelog.Debug.Println(ref, mode, "VOLUME DOWN")
 								setServiceVolume(-1000)
 							}
 
-							volumelog.Debug.Println("vol change...")
+							volumelog.Debug.Println(ref, mode, "vol change...")
 							serviceVolume = newVolume
 							volChange(50 > serviceVolume)
 							break normal_r
 
 						case <-v.serviceVolumeChan:
+							volumelog.Debug.Println(ref, mode, "targetVolume=", targetVolume, "   IGNORED")
 							// Volume changes from service is not interesting
 
 						case absoluteMode = <-v.absoluteModeChan:
+							volumelog.Debug.Println(ref, mode, "switching mode: absoluteMode=", absoluteMode)
 							break mode
 						}
 					}
 
-					volumelog.Debug.Println("In relative volume bounce mode")
+					mode = ":Relative:Bounce: "
+					volumelog.Debug.Println(ref, mode, " Starting")
 				bounce_r:
 					for {
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume
 							newVolume := ios2decVolume(dVolume)
-							//volumelog.Debug.Println( "br: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+							volumelog.Debug.Println(ref, mode, "deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume)
 							if between(newVolume, 50, serviceVolume) && newVolume < 55 && newVolume > 45 {
 								serviceVolume = newVolume
 								break bounce_r
 							} else {
 								if newVolume > serviceVolume && newVolume > 50 {
-									volumelog.Debug.Println("VOLUME UP")
+									volumelog.Debug.Println(ref, mode, "VOLUME UP")
 									setServiceVolume(1000)
 								}
 
 								if newVolume < serviceVolume && newVolume < 50 {
-									volumelog.Debug.Println("VOLUME DOWN")
+									volumelog.Debug.Println(ref, mode, "VOLUME DOWN")
 									setServiceVolume(-1000)
 								}
 
@@ -199,9 +214,11 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 							serviceVolume = newVolume
 
 						case <-v.serviceVolumeChan:
+							volumelog.Debug.Println(ref, mode, "targetVolume=", targetVolume, "   IGNORED")
 							// Volume changes from service is not interesting
 
 						case absoluteMode = <-v.absoluteModeChan:
+							volumelog.Debug.Println(ref, mode, "switching mode: absoluteMode=", absoluteMode)
 							break mode
 						}
 					}
