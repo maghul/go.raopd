@@ -115,6 +115,7 @@ func (r *raop) setRemote(remote string) error {
 }
 
 func (r *raop) teardown() {
+	r.rtsp.Close()
 	r.sink.Stopped()
 	r.sequencer.flush()
 	r.data.Close()
