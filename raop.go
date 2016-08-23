@@ -33,7 +33,7 @@ type raop struct {
 
 	seqchan   chan *rtpPacket
 	rrchan    chan rerequest
-	sequencer sequencer
+	sequencer *sequencer
 }
 
 var raoplog = logger.GetLogger("raopd.raop")
@@ -102,7 +102,7 @@ func (r *raop) startRtp(controlAddr, timingAddr *net.UDPAddr) (err error) {
 		}
 	}
 	if err != nil {
-		r.sequencer.stop()
+		r.sequencer.close()
 		raoplog.Debug.Println("Failed to start RTP:", err)
 	}
 	return
@@ -116,7 +116,7 @@ func (r *raop) setRemote(remote string) error {
 
 func (r *raop) teardown() {
 	r.sink.Stopped()
-	r.sequencer.stop()
+	r.sequencer.flush()
 	r.data.Close()
 	r.control.Close()
 	r.timing.Close()
@@ -125,6 +125,7 @@ func (r *raop) teardown() {
 
 func (r *raop) close() {
 	r.rtsp.Close()
+	r.sequencer.close()
 	r.data.Close()
 	r.control.Close()
 	r.timing.Close()

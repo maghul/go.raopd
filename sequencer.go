@@ -3,237 +3,210 @@ package raopd
 import (
 	"emh/logger"
 	"fmt"
-	"os"
+	//	"os"
 	"time"
 )
 
 var seqlog = logger.GetLogger("raopd.sequencer")
 
-const sequencerDebug = false
-
 type sequencer struct {
-	seq chan int
+	// Control channel
+	control chan int
+
+	// Internally used
+	low     seqno
+	lowd    bool
+	retries map[seqno]int
+	packets map[seqno]*rtpPacket
 }
 
 type rerequest struct {
-	first, count uint16
+	first, count seqno
 }
 
+func (rr *rerequest) String() string {
+	return fmt.Sprintf("ReRequest{first=%d, count=%d}", rr.first, rr.count)
+}
+
+// Restart the sequencer. Empty all internal caches
 func (s sequencer) flush() {
-	s.seq <- 0
+	s.control <- 0
 }
 
-func (s sequencer) stop() {
-	s.seq <- 1
-}
-
+// Close the sequencer completely.
 func (s sequencer) close() {
-	s.seq <- 1
+	s.control <- 1
 }
 
-func seqnoDelta(a, b uint16) int {
-	switch {
-	case a == b:
-		return 0
-	case a > b:
-		return int(a - b)
-	case (a < 8192 && b > 65536-8192):
-		return 65536 - int(b-a)
-	case a < b:
-		return -int(b - a)
-	}
-	panic(fmt.Sprint("seqnoDelta, no case for a=", a, ", b=", b))
+// Internal functions
+
+// Sequencer is in recovery mode.
+func (m *sequencer) inRecovery() bool {
+	return len(m.packets) > 0
 }
 
-// This will take unordered data on the input channel and order
-// it to the output channel. It will also send rerequests on the
-// request channel if there are gaps in the indata
-func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request chan rerequest) sequencer {
-	s := sequencer{make(chan int)}
+// Internal function to clear all internal caches and
+// start over. Called by sequence go-routine when flush has been called.
+func (m *sequencer) restartSequencer() {
+	m.lowd = false
+	m.low = 0
+	m.retries = make(map[seqno]int)
+	m.packets = make(map[seqno]*rtpPacket)
+}
 
-	go func() {
-		pkts := make(map[uint16]*rtpPacket)
-
-		long := time.Duration(365 * 24 * time.Hour)
-		short := time.Duration(10 * time.Millisecond) // 10 mS
-		current := long
-		timer := time.NewTimer(current)
-
-		c := 0
-
-		transmit := func(pkt *rtpPacket) {
-			delete(pkts, pkt.seqno)
+// flush packet cache from seqno and onwards and set low to
+// first gap in the cache.
+func (m *sequencer) flushCached(sn seqno, outf func(pkt *rtpPacket)) {
+	sn--
+	for {
+		sn++
+		pkt, ok := m.packets[sn]
+		//seqlog.Debug.Println("sequencer::handle: FLUSH seqno=", seqno, " exists=", ok)
+		if ok {
+			m.logOut(sn)
 			outf(pkt)
+			delete(m.packets, sn)
+		} else {
+			break
 		}
+	}
+	m.low = sn
+}
 
-		initial := true
-		next := uint16(0)
-		nextInputSeqno := uint16(0)
+// handle an incoming packet.
+// If in sequence then just output it
+// If too new (i.e. a gap exists) cache it.
+// If too old just drop it.
+func (m *sequencer) handle(pkt *rtpPacket, outf func(pkt *rtpPacket)) {
+	sn := pkt.sn
 
-		sendReRequests := func() {
-			entries := len(pkts)
-			gap := false
-			start := uint16(0)
-			count := uint16(0)
+	if !m.lowd {
+		m.lowd = true
+		m.low = sn
+		seqlog.Debug.Println("sequencer::handle: Initial seqno=", sn)
+	}
+	delete(m.retries, sn)
+	if m.low == sn {
+		outf(pkt)
+		m.flushCached(sn+1, outf)
+	} else if seqnoDelta(sn, m.low) < 0 {
+		seqlog.Debug.Println("sequencer::handle: too old packet", sn)
+	} else {
+		m.packets[sn] = pkt
+	}
+}
 
-			for ii := next; entries > 0; ii++ {
-				pkt, ok := pkts[ii]
-				if sequencerDebug {
-					state := "GAP"
-					if ok {
-						if pkt == nil {
-							state = "REQUESTED"
-						} else {
-							state = "OK"
-						}
-					}
-					seqlog.Debug.Println("gap ", ii, ", state=", state)
-				}
-				if ok {
-					if gap {
-						seqlog.Debug.Println("TX: REREQUEST", start, ", ", count)
-						if sequencerDebug {
-							fmt.Println("TX: REREQUEST", start, ", ", count)
-						}
-						request <- rerequest{start, count}
-						gap = false
-					}
-					entries--
-				} else {
-					pkts[ii] = nil // Mark as being in recovery
-					if !gap {
-						gap = true
-						start = ii
-						count = 0
-					}
+// Scan for gaps and send rerequests for these packets. Increment
+// the retry counter for each missing packet and check if it matches
+// 10, 40 or 90 ms for resends or 150ms for delete.
+// When 150ms has been reached for a gap it will just be skipped and
+// deleted from the sequence cache
+func (m *sequencer) sendReRequests(request chan rerequest) {
+	entries := len(m.packets)
+	start := seqno(0)
+	count := seqno(0)
+	retry := 0
+	ii := m.low
+	for entries > 0 {
+		retry = 100000
+		count = 0
+		for ; entries > 0; ii++ {
+			_, ok := m.packets[ii]
+			if ok {
+				entries--
+			} else {
+				start = ii
+				break
+			}
+		}
+		for ; entries > 0; ii++ {
+			_, ok := m.packets[ii]
+			if ok {
+				entries--
+				ii++
+				break
+			} else {
+				m.retries[ii]++
+				if retry > m.retries[ii] {
+					retry = m.retries[ii]
 				}
 				count++
-
 			}
 		}
-
-		flush := func() {
-			seqlog.Debug.Println("SEQUENCER: Flushing Sequencer")
-			// Empty everything we have stored
-			for _, pkt := range pkts {
-				if pkt != nil {
-					pkt.Reclaim()
-				}
+		if count > 0 {
+			switch retry {
+			case 1, 4, 9: // Send rerequest at 10ms, 40ms, and 90ms
+				rr := &rerequest{start, count}
+				request <- *rr
+			case 15: // Well I don't think we'll get any packets after 150 ms
+				m.remove(start, count)
 			}
-			pkts = make(map[uint16]*rtpPacket)
+		}
+	}
+}
 
-			// Empty the input channels
-		flushloop:
-			for {
+// Remove all retries and packets starting with start and count entries
+// low will be set to the new start
+func (m *sequencer) remove(start, count seqno) {
+	for ii := count; ii > 0; ii-- {
+		delete(m.packets, start)
+		delete(m.retries, start)
+		start++
+	}
+	m.low = start
+}
+
+// Start a sequence in a goroutine.
+func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request chan rerequest) *sequencer {
+
+	m := &sequencer{}
+	m.control = make(chan int, 0)
+	m.restartSequencer()
+
+	timeout := time.Duration(10 * time.Millisecond) // 10 mS
+	timer := time.NewTimer(timeout)
+
+	var cmd int
+
+	go func() {
+	normal:
+		for {
+			// Normal operation
+			for !m.inRecovery() {
 				select {
 				case pkt := <-data:
-					pkt.Reclaim()
-				default:
-					break flushloop
+					m.handle(pkt, outf)
+				case cmd = <-m.control:
+					goto command
 				}
 			}
 
-			initial = true
-			seqlog.Debug.Println("SEQUENCER: Flushed Sequencer")
-		}
+			// Recovery
+			for m.inRecovery() {
+				timer.Reset(timeout)
+				select {
+				case pkt := <-data:
+					m.handle(pkt, outf)
+				case cmd = <-m.control:
+					goto command
+				case <-timer.C:
+					m.sendReRequests(request)
+					m.flushCached(m.low, outf)
 
-		defer func() {
-			if c == 0 {
-				panic("SEQUENCER: unexpected loop exit!")
-			}
-		}()
-		for {
-			// Reset the timer to short (10ms) if the state has changed
-			newTime := long
-			if len(pkts) > 0 {
-				newTime = short
-			}
-			if current != newTime {
-				current = newTime
-				timer.Reset(current)
-			}
-
-			// Dump all packets possible from next onwards
-			for {
-				pkt, ok := pkts[next]
-				if !ok || pkt == nil {
-					break
-				}
-				transmit(pkt)
-				next++
-			}
-
-			if initial {
-				if sequencerDebug {
-					seqlog.Debug.Println("SEQUENCER: Waiting for data to start")
 				}
 			}
-			select {
-			case pkt := <-data:
-				seqno := pkt.seqno
-				delta := seqnoDelta(seqno, next)
-				indelta := seqnoDelta(seqno, nextInputSeqno)
+			continue normal
 
-				switch {
-				case initial:
-					initial = false
-					delta = 0
-					indelta = 0
-					fallthrough
-
-				case delta == 0: // In sequence. just output
-					next = seqno + 1
-					if indelta == 0 {
-						if sequencerDebug {
-							fmt.Println("DATA IN SEQUENCE: seqno=", seqno)
-						}
-						nextInputSeqno = next
-					} else {
-						if sequencerDebug {
-							fmt.Println("RECOVERY IN SEQUENCE: seqno=", seqno)
-						}
-					}
-					transmit(pkt)
-
-				case delta > 2000: // Way ahead of whats being recovered
-					if sequencerDebug {
-						fmt.Println("TOO MUCH: seqno=", seqno)
-					}
-					fmt.Fprintln(os.Stderr, "SEQUENCER: Delta too large, ", delta, " flushing sequencer")
-					flush()
-
-				case indelta >= 0: // Just a normal data packet. Save it but don't remark old recovery requests.
-					if sequencerDebug {
-						fmt.Println("DATA AHEAD: seqno=", seqno)
-					}
-					pkts[seqno] = pkt
-					nextInputSeqno = seqno + 1
-
-				case delta > 0: // Recovery packet which is ahead of what we expected. Save it and remark old recovery requests prior to it.
-					if sequencerDebug {
-						fmt.Println("RECOVERY AHEAD: seqno=", seqno)
-					}
-					pkts[seqno] = pkt
-					for ii := next; ii < seqno; ii++ {
-						p, ok := pkts[ii]
-						if ok && p == nil { // Supposedly being recovered but not yet received, mark for recovery again
-							delete(pkts, ii)
-						}
-					}
-
-				default:
-					pkt.Reclaim()
-				}
-
-			case <-timer.C:
-				sendReRequests()
-				current = 0 // Force rearming the timer
-
-			case c = <-s.seq: // Flush
-				flush()
+		command:
+			switch cmd {
+			case 0:
+				m.restartSequencer()
+			case 1:
+				return
 			}
 
 		}
 	}()
-	return s
+
+	return m
 }

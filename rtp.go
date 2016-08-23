@@ -3,7 +3,6 @@ package raopd
 import (
 	"bytes"
 	"emh/logger"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -61,13 +60,13 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 
 		case 86:
 			base := pkt.content
-			status := pkt.seqno // Seqno is actuall some kind of status.
+			status := uint16(pkt.sn) // Seqno is actuall some kind of status.
 			if status == 1 {
 				// It seems that status==1 means that the retransmission won't happen
 				// We could keep track of the rerequests and zap them but it is easier to
 				// flush the sequencer.
-				failedSeqno := binary.BigEndian.Uint16(pkt.content[4:6])
-				zero := binary.BigEndian.Uint16(pkt.content[6:8])
+				failedSeqno := decodeSeqno(pkt.content[4:6])
+				zero := decodeSeqno(pkt.content[6:8])
 				rtplog.Debug.Println(prefix, "NO Resend for ", failedSeqno)
 				if zero != 0 {
 					rtplog.Info.Println(prefix, "Resend fail assertion error, zero=", zero)
@@ -76,8 +75,8 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 				r.sequencer.flush()
 			} else {
 				pkt.content = pkt.content[4:]
-				pkt.seqno = binary.BigEndian.Uint16(pkt.content[2:4])
-				rtplog.Debug.Printf("%sRecovery Packet, status=%d, seqno=%d", prefix, status, pkt.seqno)
+				pkt.sn = decodeSeqno(pkt.content[2:4])
+				rtplog.Debug.Println(prefix, "Recovery Packet, status=", status, ", seqno=", pkt.sn)
 				if base[4] != 0x80 && base[5] != 0x60 {
 					l := len(base)
 					if l > 20 {
@@ -95,23 +94,24 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 	}
 	tx := func(conn *net.UDPConn) {
 		buf := make([]byte, 32)
-		seqno := uint16(1)
+		sn := seqno(1)
 		//		timestamp := uint32(1)
 
 		for {
 			select {
 			case rr := <-r.rrchan:
-				rtplog.Debug.Println(prefix, "ReRequest:", seqno, ", rr=", rr)
+				rtplog.Debug.Println(prefix, "ReRequest:", sn, ", rr=", rr)
 				buf[0] = 0x80
 				buf[1] = 85 + 0x80
-				binary.BigEndian.PutUint16(buf[2:4], seqno)
-				binary.BigEndian.PutUint16(buf[4:6], rr.first)
-				binary.BigEndian.PutUint16(buf[6:8], rr.count)
+
+				sn.encode(buf[2:4])
+				rr.first.encode(buf[4:6])
+				rr.count.encode(buf[6:8])
 
 				conn.Write(buf[0:8])
 				rtplog.Debug.Println(prefix, "Recovery Request:", rr, " sent to ", conn.RemoteAddr())
 			}
-			seqno++
+			sn++
 		}
 	}
 	return rx, tx, "CONTROL"
@@ -163,7 +163,7 @@ func startRtp(f rtpFactory, raddr *net.UDPAddr) (*rtp, error) {
 					return // Exit RTP server
 				}
 				pkt.content = pkt.buf[0:n]
-				pkt.seqno = binary.BigEndian.Uint16(pkt.content[2:4])
+				pkt.sn = decodeSeqno(pkt.content[2:4])
 				pkt.debug(name)
 				handler(pkt)
 

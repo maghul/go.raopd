@@ -2,16 +2,18 @@ package raopd
 
 import (
 	"emh/logger"
-	"encoding/binary"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
+
+const sequencerDebug = false
 
 func inSeqRange(in chan *rtpPacket, from, to int) {
 	for ii := from; ii != to+1; ii++ {
-		in <- testPacket(uint16(ii), 0)
+		in <- testPacket(seqno(ii), 0)
 	}
 }
 
@@ -19,7 +21,7 @@ func inSeqs(in chan *rtpPacket, va ...interface{}) {
 	for _, v := range va {
 		switch v := v.(type) {
 		case int:
-			in <- testPacket(uint16(v), 0)
+			in <- testPacket(seqno(v), 0)
 		case []int:
 			inSeqRange(in, v[0], v[1])
 		default:
@@ -35,10 +37,10 @@ func checkSeqNo(t *testing.T, q chan *rtpPacket, expected int) {
 	select {
 	case p := <-q:
 		if sequencerDebug {
-			seqlog.Debug.Println("CHECK SEQNO received=", p.seqno)
+			seqlog.Debug.Println("CHECK SEQNO received=", p.sn)
 		}
-		assert.NotEqual(t, -1, expected, fmt.Sprintf("Queue should be empty, contained packet with seqno=%d", p.seqno))
-		assert.Equal(t, uint16(expected), p.seqno)
+		assert.NotEqual(t, -1, expected, fmt.Sprintf("Queue should be empty, contained packet with seqno=%d", p.sn))
+		assert.Equal(t, seqno(expected), p.sn)
 	case <-time.After(time.Millisecond * 1):
 		if sequencerDebug {
 			seqlog.Debug.Println("CHECK SEQNO  *empty*")
@@ -79,13 +81,13 @@ func checkReq(t *testing.T, q chan rerequest, expected, count int) {
 	}
 }
 
-func testPacket(seqno uint16, payloadType uint8) *rtpPacket {
+func testPacket(sn seqno, payloadType uint8) *rtpPacket {
 	pkt := makeRtpPacket()
-	pkt.seqno = seqno
+	pkt.sn = sn
 	buf := pkt.buf[0:32]
 	pkt.content = buf
 	buf[1] = payloadType
-	binary.BigEndian.PutUint16(buf[2:4], seqno)
+	sn.encode(buf[2:4])
 	return pkt
 }
 
@@ -115,7 +117,6 @@ func TestSequenceConsecutive(t *testing.T) {
 }
 
 func TestSequenceSingleGap(t *testing.T) {
-	seqlog.SetLevel(logger.LogInfo)
 	seqlog.Debug.Println("TestSequenceSingleGap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
@@ -178,31 +179,30 @@ func TestSequenceWideGap(t *testing.T) {
 	}
 	s := startSequencer(in, of, request)
 
-	inSeqs(in, []int{46542, 46544})
-	// gap 46545..46553
-	inSeqs(in, 46554, 46549, []int{46555, 46559})
-	// gap 46560..46568
-	inSeqs(in, []int{46569, 46570})
+	inSeqs(in, []int{46542, 46544})               // 46542..46544
+	inSeqs(in, 46554, 46549, []int{46555, 46559}) // 46542..46544 46549 46554..46559
+	checkSeqNos(t, out, 46542, 46544)             // 46542..46544 <-- 46549 46554..46559
 
-	checkSeqNos(t, out, 46542, 46544)
-
-	time.Sleep(11 * time.Millisecond)
-
-	inSeqs(in, 46545, []int{46547, 46553})
-	checkSeqNos(t, out, 46545, 46545)
+	inSeqs(in, 46545, []int{46547, 46553}) // 46545 465474..46559
+	checkSeqNos(t, out, 46545, 46545)      // 46545 <-- 465474..46559
 
 	time.Sleep(11 * time.Millisecond)
-
-	in <- testPacket(46546, 0)
+	checkReq(t, request, 46546, 1) // ??1 46546..46546
+	checkReq(t, request, -1, 0)
+	inSeqs(in, []int{46569, 46570}) // 46545 <-- 465474..46559 46569..46570
 
 	time.Sleep(11 * time.Millisecond)
+	checkReq(t, request, 46560, 9) // ??1 46560..46568
+	checkReq(t, request, -1, 0)
 
-	checkSeqNos(t, out, 46546, 46559)
+	time.Sleep(22 * time.Millisecond)
+	inSeqs(in, 46546)                 // 46546..46559 46569..46570
+	checkSeqNos(t, out, 46546, 46559) // 46546..46559 <-- 46569..46570
+	checkReq(t, request, 46546, 1)    // ??2 46546..46546
+	checkReq(t, request, -1, 0)
 
-	checkReq(t, request, 46545, 4)
-	checkReq(t, request, 46550, 4)
-	checkReq(t, request, 46560, 9)
-	checkReq(t, request, 46546, 1)
+	time.Sleep(11 * time.Millisecond)
+	checkReq(t, request, 46560, 9) // ??2 46560..46568
 	checkReq(t, request, -1, 0)
 
 	s.close()
@@ -211,11 +211,10 @@ func TestSequenceWideGap(t *testing.T) {
 func TestSequenceReReRequest(t *testing.T) {
 	seqlog.Debug.Println("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
-	out := make(chan *rtpPacket, 10)
+	out := make(chan *rtpPacket, 20)
 	request := make(chan rerequest, 10)
 
 	of := func(pkt *rtpPacket) {
-		seqlog.Debug.Println("       OUT PACKET=", pkt.seqno)
 		out <- pkt
 	}
 	s := startSequencer(in, of, request)
@@ -237,27 +236,30 @@ func TestSequenceReReRequest(t *testing.T) {
 
 	inSeqs(in, 46570)
 
-	time.Sleep(11 * time.Millisecond)
-
-	inSeqs(in, 46546)
-
-	time.Sleep(11 * time.Millisecond)
-
-	checkSeqNos(t, out, 46546, 46559)
-
 	checkReq(t, request, 46545, 4)
 	checkReq(t, request, 46550, 4)
 	checkReq(t, request, 46560, 9)
-	checkReq(t, request, 46546, 1)
+	checkReq(t, request, -1, 0)
+
+	time.Sleep(33 * time.Millisecond)
+
+	inSeqs(in, 46546)
+	checkSeqNos(t, out, 46546, 46559)
+
+	// Second rerequests
+	println("SECOND REREQUEST")
 	checkReq(t, request, 46546, 1)
 	checkReq(t, request, 46560, 9)
 	checkReq(t, request, -1, 0)
 
+	println("SECOND REREQUEST DONE")
 	s.close()
+	println("TEST DONE")
+
 }
 
-func TestSequenceSlowResponse(t *testing.T) {
-	seqlog.Debug().Println("TestSequenceDoublegap")
+func NoTestSequenceSlowResponse(t *testing.T) {
+	seqlog.Debug.Println("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -286,7 +288,7 @@ func TestSequenceSlowResponse(t *testing.T) {
 }
 
 func TestSequenceMissingRecoveryPacket(t *testing.T) {
-	seqlog.Debug().Println("TestSequenceDoublegap")
+	seqlog.Debug.Println("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -305,13 +307,88 @@ func TestSequenceMissingRecoveryPacket(t *testing.T) {
 	// This packet is a recovery but 46545 is still missing so we should
 	// get a new request for that.
 	inSeqs(in, 46546)
-	time.Sleep(11 * time.Millisecond)
+	time.Sleep(33 * time.Millisecond)
 
 	checkReq(t, request, 46545, 2)
 	checkReq(t, request, 46545, 1)
 	checkReq(t, request, -1, 0)
 
 	s.close()
+}
+
+func TestSequenceGiveUp(t *testing.T) {
+	seqlog.Debug.Println("TestSequenceGiveUp")
+	in := make(chan *rtpPacket, 10)
+	out := make(chan *rtpPacket, 10)
+	request := make(chan rerequest, 10)
+
+	of := func(pkt *rtpPacket) {
+		out <- pkt
+	}
+	s := startSequencer(in, of, request)
+
+	inSeqs(in, []int{46542, 46544}) // 46542..46544
+	inSeqs(in, []int{46547, 46554}) // 46542..46544  46547..46554
+
+	checkSeqNos(t, out, 46542, 46544) // 46542..46544  <-- 46547..46554
+	time.Sleep(11 * time.Millisecond)
+
+	// This packet is a recovery but 46545 is still missing so we should
+	// get a new request for that.
+	inSeqs(in, 46546) // 46546..46554
+
+	time.Sleep(11 * time.Millisecond)
+	//	checkSeqNos(t, out, 46547, 46554)
+	checkReq(t, request, 46545, 2) // ??1 46545..46546?
+	checkReq(t, request, -1, 0)
+
+	time.Sleep(11 * time.Millisecond)
+	checkReq(t, request, -1, 0)
+
+	time.Sleep(22 * time.Millisecond)
+	checkReq(t, request, 46545, 1) // ??2 46545..46545?
+	checkReq(t, request, -1, 0)
+
+	time.Sleep(11 * time.Millisecond)
+	checkReq(t, request, -1, 0)
+
+	time.Sleep(44 * time.Millisecond)
+	checkReq(t, request, 46545, 1) // ??3 46545..46545?
+	checkReq(t, request, -1, 0)
+
+	time.Sleep(11 * time.Millisecond)
+	checkReq(t, request, -1, 0)
+
+	time.Sleep(55 * time.Millisecond)
+	println("7")
+	checkReq(t, request, -1, 0)
+	// We should not see any more requests for 46545
+	//checkReq(t, request, -1, 0)
+
+	s.close()
+}
+
+func TestSequencerRemove(t *testing.T) {
+	s := &sequencer{}
+	s.restartSequencer()
+	Debug("log.debug/raopd.sequencer", 1)
+	Debug("log.info/raopd.sequencer", 1)
+	rrc := make(chan rerequest, 10)
+	outf := func(rp *rtpPacket) {
+
+	}
+	s.lowd = true
+	s.low = 117
+	s.handle(testPacket(127, 0), outf)
+	s.handle(testPacket(137, 0), outf)
+	s.remove(117, 10)
+	s.sendReRequests(rrc)
+	s.sendReRequests(rrc)
+	s.sendReRequests(rrc)
+
+	//	s.checkReq(t, rrc, 117, 10)
+	s.checkReq(t, rrc, 128, 9)
+	s.checkReq(t, rrc, -1, 0)
 }
 
 func TestSequenceSeqNo(t *testing.T) {
