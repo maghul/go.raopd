@@ -126,6 +126,12 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 	h.Add("Cseq", req.Header["Cseq"][0])
 	h.Add("Apple-Jack-Status", "connected; type=analog")
 
+	dacpid := req.Header.Get("Dacp-Id")
+	activeremote := req.Header.Get("Active-Remote")
+	if dacpid != "" && activeremote != "" {
+		rs.raop.dacp.open(dacpid, activeremote)
+	}
+
 	switch req.Method {
 	case "OPTIONS":
 		h.Add("Public", "ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER")
@@ -189,8 +195,6 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 	case "SETUP":
 		raop := rs.raop
 
-		raop.dacpID = req.Header["Dacp-Id"][0]
-		raop.activeRemote = req.Header["Active-Remote"][0]
 		raop.clientUserAgent = req.Header["User-Agent"][0]
 
 		session := "DEADBEEF"
@@ -201,8 +205,6 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 	case "GET_PARAMETER":
 		raop := rs.raop
 
-		raop.dacpID = req.Header["Dacp-Id"][0]
-		raop.activeRemote = req.Header["Active-Remote"][0]
 		raop.clientUserAgent = req.Header["User-Agent"][0]
 
 		content := bytes.NewBufferString("")

@@ -25,11 +25,10 @@ type raop struct {
 	// TODO: This should be considered session data. There is a 1-1 relationship
 	//       between an Raop instance and a session instance but cover different
 	//       functionality
-	dacpID          string
-	activeRemote    string
 	clientUserAgent string
 	br              *bonjourRecord
 
+	dacp                  *dacp
 	rtsp                  *rtspServer
 	data, control, timing *rtp
 

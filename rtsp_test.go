@@ -69,6 +69,9 @@ func makeTestRtspSession() *rtspSession {
 		panic(err)
 	}
 	r := &raop{}
+	r.dacp = &dacp{}
+	r.dacp.mrc = make(chan func() error, 10)
+	r.dacp.crc = make(chan func() error, 12)
 
 	r.plc = makeTestClient()
 	return &rtspSession{i, r, nil}
@@ -235,8 +238,12 @@ User-Agent: AirPlay/267.3
 	ha.assert("connected; type=analog", "Apple-Jack-Status")
 	ha.assert(expected, "Transport")
 
-	assert.Equal(t, "19050F2FE0FD618D", r.raop.dacpID)
-	assert.Equal(t, "84694584", r.raop.activeRemote)
+	// Run the request in the thread to get the values into the dacp instance
+	fnc := <-r.raop.dacp.mrc
+	fnc()
+
+	assert.Equal(t, "19050F2FE0FD618D", r.raop.dacp.dacpID())
+	assert.Equal(t, "84694584", r.raop.dacp.activeRemote())
 	assert.Equal(t, "AirPlay/267.3", r.raop.clientUserAgent)
 }
 

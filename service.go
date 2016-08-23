@@ -47,6 +47,8 @@ func (rf *ServiceRegistry) RegisterService(service Service) (*ServiceRef, error)
 
 	var r *raop
 	r = &svc.raop
+	r.dacp = newDacp()
+
 	r.plc = service
 
 	r.audioBuffer = make([]byte, 8192)
