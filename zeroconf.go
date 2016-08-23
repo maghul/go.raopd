@@ -11,7 +11,7 @@ import (
 	"github.com/guelfey/go.dbus"
 )
 
-type BonjourRecord struct {
+type bonjourRecord struct {
 	serviceName   string
 	serviceType   string
 	serviceDomain string
@@ -37,7 +37,7 @@ func getMyFQDN() string {
 	return fqdn
 }
 
-func (br *BonjourRecord) appendText(v ...string) {
+func (br *bonjourRecord) appendText(v ...string) {
 	vl := len(v)
 	for ii := 0; ii < vl; ii++ {
 		br.text = append(br.text, bytes.NewBufferString(v[ii]).Bytes())
@@ -52,12 +52,12 @@ func hardwareAddressToServicePrefix(hwaddr net.HardwareAddr) string {
 
 }
 
-func makeAPBonjourRecord(raop *Raop) *BonjourRecord {
-	r := &BonjourRecord{}
+func makeAPBonjourRecord(raop *raop) *bonjourRecord {
+	r := &bonjourRecord{}
 
 	fqdn := getMyFQDN()
 	hwaddr := hardwareAddressToServicePrefix(raop.hwaddr)
-	port := raop.Port()
+	port := raop.port()
 
 	r.serviceName = fmt.Sprintf("%s@%s", hwaddr, "durer")
 	r.serviceType = "_raop._tcp"
@@ -87,28 +87,12 @@ func makeAPBonjourRecord(raop *Raop) *BonjourRecord {
 	return r
 }
 
-/*
-func MakeBonjourRecord(serviceName, serviceType string) *BonjourRecord {
-	r := &BonjourRecord{}
-
-	fqdn := getMyFQDN()
-
-	r.serviceName = strings.Replace(serviceName, "%FQDN%", fqdn, 1) // sname
-	r.serviceType = serviceType                                     // stype
-	r.serviceDomain = "local"                                       // sdomain
-	r.serviceHost = fqdn                                            // shost
-	r.Port = 4711
-
-	return r
-}
-*/
-
-func (r *BonjourRecord) Unpublish() {
-	fmt.Println("Bonjour unpublish...")
+func (r *bonjourRecord) Unpublish() {
+	fmt.Println("bonjour unpublish...")
 	// TODO: do...
 }
 
-func (r *BonjourRecord) Publish() {
+func (r *bonjourRecord) Publish() {
 	var dconn *dbus.Conn
 	var obj *dbus.Object
 	var path dbus.ObjectPath

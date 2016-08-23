@@ -12,11 +12,11 @@ import (
 	"strings"
 )
 
-type Raop struct {
-	rf *RaopFactory
+type raop struct {
+	rf *ServiceRegistry
 	l  net.Listener
 
-	plc         Client
+	plc         Service
 	hwaddr      net.HardwareAddr
 	audioBuffer []byte
 	alac        alac.AlacFile
@@ -28,7 +28,7 @@ type Raop struct {
 	activeRemote    string
 	clientUserAgent string
 	samplingRate    int64
-	br              *BonjourRecord
+	br              *bonjourRecord
 
 	data, control, timing *rtp
 
@@ -39,57 +39,18 @@ type Raop struct {
 	aesiv  []byte
 }
 
-type RaopFactory struct {
-	i *info
-}
-
-func (r *Raop) String() string {
+func (r *raop) String() string {
 	return fmt.Sprint("RAOP: hw=", r.hwaddr)
 }
 
-func makeRaop(w io.Writer) *Raop {
-	r := &Raop{}
-
-	var err error
-	r.hwaddr, err = net.ParseMAC("48:5D:60:7C:EE:22")
-	if err != nil {
-		panic(err)
-	}
-
-	return r
-}
-
-func (r *Raop) Close() {
-	fmt.Println("Raop::close")
-	r.br.Unpublish()
-}
-
-func (r *Raop) Port() uint16 {
+func (r *raop) port() uint16 {
 	a := r.l.Addr()
 	ta := a.(*net.TCPAddr)
 	return (uint16)(ta.Port)
 }
 
-func (r *Raop) getBonjourData(key string) string {
-	panic("NYI")
-}
-
-func MakeRaopFactory(maxClients int, keyfile io.Reader) (*RaopFactory, error) {
-	rf := &RaopFactory{}
-	var err error
-	rf.i, err = makeInfo(keyfile)
-	if err != nil {
-		return nil, err
-	}
-
-	return rf, nil
-}
-
-func (rf *RaopFactory) Close() {
-}
-
 type rtspHandler struct {
-	r *Raop
+	r *raop
 }
 
 func (r *rtspHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -97,42 +58,7 @@ func (r *rtspHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-// TODO: Not a session, it is an end-point, a device or something like that
-func (rf *RaopFactory) MakeRaopSession(port uint16, client Client) (*Raop, error) {
-	r := &Raop{}
-
-	r.plc = client
-
-	r.audioBuffer = make([]byte, 8192)
-
-	r.samplingRate = 44100 // TODO: Get this from paramaters
-
-	var err error
-	r.hwaddr, err = net.ParseMAC("48:5D:60:7C:EE:22")
-	if err != nil {
-		panic(err)
-	}
-
-	r.rf = rf
-
-	r.l, err = net.Listen("tcp", ":5100") // TODO: use port
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Println("Starting RTSP server at ", r.l.Addr())
-	s := makeRtspServer(rf.i, r)
-	//	r.s = &http.Server{}
-	//	r.s.Handler = &rtspHandler{r}
-	go s.Serve(r.l)
-
-	r.br = makeAPBonjourRecord(r)
-	r.br.Publish()
-
-	return r, nil
-}
-
-func (r *Raop) startRtp(remote, rtpmap, fmtpstr string, aeskey []byte, aesiv []byte) {
+func (r *raop) startRtp(remote, rtpmap, fmtpstr string, aeskey []byte, aesiv []byte) {
 	fmt.Println("startRtp...")
 	r.seqchan = make(chan *rtpPacket, 256)
 	r.rrchan = make(chan rerequest, 128)
@@ -147,11 +73,11 @@ func (r *Raop) startRtp(remote, rtpmap, fmtpstr string, aeskey []byte, aesiv []b
 	r.alac = alac.MakeAlacFile(af)
 }
 
-func (r *Raop) teardown() {
+func (r *raop) teardown() {
 	fmt.Println("What do I need to teardown actually?")
 }
 
-func (r *Raop) getParameter(name string) string {
+func (r *raop) getParameter(name string) string {
 	switch name {
 	case "volume":
 		return "0.000000"
@@ -160,7 +86,7 @@ func (r *Raop) getParameter(name string) string {
 	}
 }
 
-func (r *Raop) getParameters(req io.Reader, resp io.Writer) {
+func (r *raop) getParameters(req io.Reader, resp io.Writer) {
 	br := bufio.NewReader(req)
 	bw := bufio.NewWriter(resp)
 
@@ -180,18 +106,18 @@ func (r *Raop) getParameters(req io.Reader, resp io.Writer) {
 
 }
 
-func (r *Raop) rtptoms(rtp int64) int {
+func (r *raop) rtptoms(rtp int64) int {
 	return int((rtp * 1000) / r.samplingRate)
 }
 
-func (r *Raop) setProgress(start, current, end int64) {
+func (r *raop) setProgress(start, current, end int64) {
 	position := r.rtptoms(current - start)
 	duration := r.rtptoms(end - start)
 
 	r.plc.SetProgress(position, duration)
 }
 
-func (r *Raop) handleAudioPacket(pkt *rtpPacket) {
+func (r *raop) handleAudioPacket(pkt *rtpPacket) {
 	fmt.Println("Received audio packet ", pkt.seqno)
 	mode := cipher.NewCBCDecrypter(r.aeskey, r.aesiv)
 

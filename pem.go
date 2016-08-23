@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-func GetRSAPrivateKey(r io.Reader) (*rsa.PrivateKey, error) {
+func getRSAPrivateKey(r io.Reader) (*rsa.PrivateKey, error) {
 	b := make([]byte, 8192)
 
 	n, err := r.Read(b)

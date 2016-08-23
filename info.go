@@ -19,7 +19,7 @@ type info struct {
 func makeInfo(keyfile io.Reader) (*info, error) {
 	var err error
 	i := &info{}
-	i.key, err = GetRSAPrivateKey(keyfile)
+	i.key, err = getRSAPrivateKey(keyfile)
 	if err != nil {
 		return nil, err
 	}
@@ -36,6 +36,7 @@ func (i *info) rsaKeySign(b64digest string, ipaddr net.IP, hwaddr net.HardwareAd
 
 	fmt.Println("digest", hex.Dump(digest))
 	buffer.Write(digest)
+	// TODO: An IPv4 address wont work
 	fmt.Println("ipaddr", hex.Dump(ipaddr))
 	buffer.Write(ipaddr)
 	fmt.Println("hwaddr", hex.Dump(hwaddr))

@@ -20,12 +20,12 @@ import (
  */
 type rtspServer struct {
 	i    *info
-	raop *Raop
+	raop *raop
 }
 
 type rtspSession struct {
 	i    *info
-	raop *Raop
+	raop *raop
 	c    net.Conn
 }
 
@@ -61,7 +61,7 @@ func (t *rtspResponseWriter) finishResponse() {
 	t.wr.Flush()
 }
 
-func makeRtspServer(i *info, raop *Raop) *rtspServer {
+func makeRtspServer(i *info, raop *raop) *rtspServer {
 	r := &rtspServer{}
 	r.i = i
 	r.raop = raop

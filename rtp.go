@@ -6,7 +6,7 @@ import (
 	"net"
 )
 
-const MAX_RTP_PACKET_SIZE = 1500
+const max_rtp_packet_size = 1500
 
 type rtpHandler func(pkt *rtpPacket)
 type rtpTransmitter func(conn *net.UDPConn, client *net.UDPAddr)
@@ -19,7 +19,8 @@ type rtpPacket struct {
 }
 
 func makeRtpPacket() *rtpPacket {
-	return &rtpPacket{0, nil, make([]byte, MAX_RTP_PACKET_SIZE)}
+	// TODO: We can calculate this from fmtp field.
+	return &rtpPacket{0, nil, make([]byte, max_rtp_packet_size)}
 }
 
 func (pkt *rtpPacket) payloadType() uint8 {
@@ -43,7 +44,7 @@ func (r *rtp) Teardown() {
 	r.Close()
 }
 
-func (r *Raop) getDataHandler() (rtpHandler, rtpTransmitter, string) {
+func (r *raop) getDataHandler() (rtpHandler, rtpTransmitter, string) {
 	return func(pkt *rtpPacket) {
 		if pkt.payloadType() == 96 {
 			r.seqchan <- pkt
@@ -54,7 +55,7 @@ func (r *Raop) getDataHandler() (rtpHandler, rtpTransmitter, string) {
 	}, nil, "DATA"
 }
 
-func (r *Raop) getControlHandler() (rtpHandler, rtpTransmitter, string) {
+func (r *raop) getControlHandler() (rtpHandler, rtpTransmitter, string) {
 	rx := func(pkt *rtpPacket) {
 		switch pkt.payloadType() {
 		case 84:
@@ -99,7 +100,7 @@ func (r *Raop) getControlHandler() (rtpHandler, rtpTransmitter, string) {
 	return rx, tx, "CONTROL"
 }
 
-func (r *Raop) getTimingHandler() (rtpHandler, rtpTransmitter, string) {
+func (r *raop) getTimingHandler() (rtpHandler, rtpTransmitter, string) {
 	return func(pkt *rtpPacket) {
 		// Ignoring any incoming packets.
 		pkt.Reclaim()
