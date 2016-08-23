@@ -23,7 +23,7 @@ func TestRtpDataReceive(t *testing.T) {
 	r := &raop{}
 	r.seqchan = make(chan *rtpPacket, 16)
 
-	handler, _, _ := r.getDataHandler()
+	handler, _, _ := r.getDataHandler(nil)
 
 	pkt := testPacket(66, 96)
 	handler(pkt)
@@ -35,7 +35,10 @@ func TestRtpDataReceive(t *testing.T) {
 func startRtpMock(r *raop, f rtpFactory) *net.UDPConn {
 	r.seqchan = make(chan *rtpPacket, 16)
 
-	rtp := startRtp(f, nil)
+	rtp, err := startRtp(f, nil)
+	if err != nil {
+		panic(err)
+	}
 
 	addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: int(rtp.Port()), Zone: ""}
 	conn, err := net.DialUDP("udp", nil, addr)

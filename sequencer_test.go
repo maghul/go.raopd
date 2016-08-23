@@ -246,4 +246,5 @@ func TestSequenceSeqNo(t *testing.T) {
 	assert.Equal(t, 1, seqnoDelta(4712, 4711))
 	assert.Equal(t, -1, seqnoDelta(4711, 4712))
 	assert.Equal(t, 16, seqnoDelta(10, 65530))
+	assert.Equal(t, -16, seqnoDelta(65530, 10))
 }
