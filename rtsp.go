@@ -232,7 +232,13 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		case "image/jpeg":
 			rs.raop.plc.LoadCoverArt(contentType, req.Body)
 		case "application/x-dmap-tagged":
-			rs.raop.plc.LoadMetadata(req.Body)
+			daap, err := newDmap(req.Body)
+			if err != nil {
+				rtsplog.Info.Println("Could not load DAAP data:", err)
+				return
+			}
+			fmt.Println("daap=", daap)
+			//rs.raop.plc.LoadMetadata(req.Body)
 		default:
 			rtsplog.Info().Println("SET_PARAMETER: Unknown Content-Type=", contentType)
 
