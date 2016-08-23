@@ -28,7 +28,7 @@ func interfaceNameFromIP(ip net.IP) (string, error) {
 		for _, a := range addrs {
 			aip := a.(*net.IPNet)
 			zone := i.Name
-			netlog.Debug.Println("i=", i, ", aip=", aip, ", zone=", zone)
+			netlog.Debug().Println("i=", i, ", aip=", aip, ", zone=", zone)
 			if ip.Equal(aip.IP) {
 				return zone, nil
 			}

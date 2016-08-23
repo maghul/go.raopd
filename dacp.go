@@ -17,6 +17,8 @@ type dacp struct {
 	addr *net.TCPAddr
 }
 
+var dacplog = GetLogger("raopd.dacp")
+
 func newDacp() *dacp {
 	d := &dacp{}
 	d.mrc = make(chan func() error)
@@ -28,10 +30,10 @@ func newDacp() *dacp {
 func (d *dacp) open(id string, ar string) {
 	d.mrc <- func() error {
 		if d.id == id && d.ar == ar {
-			//			fmt.Println( "Already resolved/resolving id=", d.id, ", ar=", d.ar)
+			//			dacplog.Debug().Println( "Already resolved/resolving id=", d.id, ", ar=", d.ar)
 		} else {
 			d.addr = nil // Invalidate the old connection.
-			fmt.Println("DACP: open connection to id=", id, ", ar=", ar)
+			dacplog.Debug().Println("DACP: open connection to id=", id, ", ar=", ar)
 			d.id = id
 			d.ar = ar
 
@@ -53,7 +55,7 @@ func (d *dacp) open(id string, ar string) {
 
 func (d *dacp) close() {
 	d.mrc <- func() error {
-		fmt.Println("Closing current DACP session.")
+		dacplog.Debug().Println("Closing current DACP session.")
 		d.id = ""
 		d.ar = ""
 		d.addr = nil
@@ -88,14 +90,14 @@ volumeup 	turn audio volume up
 */
 func (d *dacp) tx(cmd string) {
 	d.crc <- func() error {
-		fmt.Println("Sending Command", cmd)
+		dacplog.Debug().Println("Sending Command", cmd)
 		url := fmt.Sprintf("http://%s/ctrl-int/1/%s", d.addr, cmd)
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "DACP: error in request", err)
 		}
 		req.Header.Add("Active-Remote", d.ar)
-		fmt.Println("DACP: req=", req.URL)
+		dacplog.Debug().Println("DACP: req=", req.URL)
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
 			if resp.StatusCode != 200 {

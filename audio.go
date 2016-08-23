@@ -4,7 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"emh/audio/alac"
-	"fmt"
+
 	"io"
 	"os"
 	"sync"
@@ -29,15 +29,17 @@ type audioStreams struct {
 	streams      []*audioStream
 }
 
+var audiolog = GetLogger("raopd.audio")
+
 func (r *audioStreams) initAlac(rtpmap, fmtpstr string) {
 	r.alacConf = alac.NewAlacConfFromFmtp(fmtpstr)
 	r.alac = alac.NewAlacDecoder(r.alacConf)
 }
 
 func (r *audioStreams) newStream(w io.Writer, s chan bool) {
-	fmt.Println("audioStreams:newStream w=", w)
+	audiolog.Debug().Println("audioStreams:newStream w=", w)
 	// Sets a timeout count of 10.
-	ns := &audioStream{w, ctx, 10}
+	ns := &audioStream{w, s, 10}
 
 	r.streamsMutex.Lock()
 	defer r.streamsMutex.Unlock()
@@ -76,7 +78,7 @@ func (r *audioStreams) writeToStreams(b []byte) {
 	for ii, as := range r.streams {
 		of := as.audioWriter
 		_, err := of.Write(b)
-		//		fmt.Println( "WTS: of=",of, ", n=", n, ", err = ", err )
+		//		audiolog.Debug().Print( "WTS: of=",of, ", n=", n, ", err = ", err )
 
 		if err != nil {
 			as.audioWriteEnd <- true

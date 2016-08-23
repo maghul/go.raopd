@@ -62,7 +62,7 @@ func (rf *ServiceRegistry) RegisterService(service Service) (*ServiceRef, error)
 Close the service and remove all published records of the service
 */
 func (svc *ServiceRef) Close() {
-	fmt.Println("Raop::close")
+	netlog.Debug().Println("Service Close")
 	svc.br.Unpublish()
 }
 
@@ -89,7 +89,7 @@ func (svc *ServiceRef) Command(cmd string) {
 func (svc *ServiceRef) Volume(vol string) {
 	ivol, err := strconv.ParseFloat(vol, 32)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error converting volume ", vol, " to integer:", err)
+		volumelog.Info.Println("error converting volume ", vol, " to integer:", err)
 	}
 	svc.raop.vol.SetDeviceVolume(float32(ivol))
 }

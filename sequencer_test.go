@@ -1,6 +1,7 @@
 package raopd
 
 import (
+	"emh/logger"
 	"encoding/binary"
 	"fmt"
 	"github.com/stretchr/testify/assert"
@@ -28,20 +29,26 @@ func inSeqs(in chan *rtpPacket, va ...interface{}) {
 }
 
 func checkSeqNo(t *testing.T, q chan *rtpPacket, expected int) {
-	debug("CHECK SEQNO expected=", expected)
+	if sequencerDebug {
+		seqlog.Debug.Println("CHECK SEQNO expected=", expected)
+	}
 	select {
 	case p := <-q:
-		debug("CHECK SEQNO received=", p.seqno)
+		if sequencerDebug {
+			seqlog.Debug.Println("CHECK SEQNO received=", p.seqno)
+		}
 		assert.NotEqual(t, -1, expected, fmt.Sprintf("Queue should be empty, contained packet with seqno=%d", p.seqno))
 		assert.Equal(t, uint16(expected), p.seqno)
 	case <-time.After(time.Millisecond * 1):
-		debug("CHECK SEQNO  *empty*")
+		if sequencerDebug {
+			seqlog.Debug.Println("CHECK SEQNO  *empty*")
+		}
 		assert.Equal(t, -1, expected, fmt.Sprintf("Queue is empty, should contain packet with seqno=%d", expected))
 	}
 }
 
 func checkSeqNos(t *testing.T, q chan *rtpPacket, from, to int) {
-	debug("CHECK SEQNO from=", from, ", to=", to)
+	seqlog.Debug.Println("CHECK SEQNO from=", from, ", to=", to)
 	for ii := from; ii <= to; ii++ {
 		checkSeqNo(t, q, ii)
 	}
@@ -49,16 +56,24 @@ func checkSeqNos(t *testing.T, q chan *rtpPacket, from, to int) {
 }
 
 func checkReq(t *testing.T, q chan rerequest, expected, count int) {
-	debug("CHECK REREQUEST", expected, "...", expected+count-1)
+	if sequencerDebug {
+		seqlog.Debug.Println("CHECK REREQUEST", expected, "...", expected+count-1)
+	}
 	select {
 	case r := <-q:
-		debug("CHECK REREQUEST: received", r)
+		if sequencerDebug {
+			seqlog.Debug.Println("CHECK REREQUEST: received", r)
+		}
 		assert.NotEqual(t, -1, expected, "Request Queue should be empty")
-		debug("CHECK REREQUEST: ", expected, int(r.first))
+		if sequencerDebug {
+			seqlog.Debug.Println("CHECK REREQUEST: ", expected, int(r.first))
+		}
 		assert.Equal(t, expected, int(r.first))
 		assert.Equal(t, count, int(r.count))
 	case <-time.After(time.Millisecond * 1):
-		debug("CHECK REREQUEST: *empty")
+		if sequencerDebug {
+			seqlog.Debug.Println("CHECK REREQUEST: *empty")
+		}
 		msg := fmt.Sprintf("Request was empty, should contain [%d...%d]", expected, expected+count-1)
 		assert.Equal(t, -1, expected, msg)
 	}
@@ -75,7 +90,6 @@ func testPacket(seqno uint16, payloadType uint8) *rtpPacket {
 }
 
 func TestSequenceConsecutive(t *testing.T) {
-	debug("TestSequenceConsecutive")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -101,7 +115,8 @@ func TestSequenceConsecutive(t *testing.T) {
 }
 
 func TestSequenceSingleGap(t *testing.T) {
-	debug("TestSequenceSingleGap")
+	seqlog.SetLevel(logger.LogInfo)
+	seqlog.Debug.Println("TestSequenceSingleGap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -127,7 +142,7 @@ func TestSequenceSingleGap(t *testing.T) {
 }
 
 func TestSequenceDoubleGap(t *testing.T) {
-	debug("TestSequenceDoublegap")
+	seqlog.Debug.Println("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -153,7 +168,7 @@ func TestSequenceDoubleGap(t *testing.T) {
 }
 
 func TestSequenceWideGap(t *testing.T) {
-	debug("TestSequenceDoublegap")
+	seqlog.Debug.Println("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
@@ -194,13 +209,13 @@ func TestSequenceWideGap(t *testing.T) {
 }
 
 func TestSequenceReReRequest(t *testing.T) {
-	debug("TestSequenceDoublegap")
+	seqlog.Debug.Println("TestSequenceDoublegap")
 	in := make(chan *rtpPacket, 10)
 	out := make(chan *rtpPacket, 10)
 	request := make(chan rerequest, 10)
 
 	of := func(pkt *rtpPacket) {
-		debug("       OUT PACKET=", pkt.seqno)
+		seqlog.Debug.Println("       OUT PACKET=", pkt.seqno)
 		out <- pkt
 	}
 	s := startSequencer(in, of, request)

@@ -2,7 +2,6 @@ package raopd
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 	"testing"
 

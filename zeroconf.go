@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -13,6 +12,8 @@ import (
 
 	"github.com/guelfey/go.dbus"
 )
+
+var zconflog = GetLogger("raopd.zeroconf")
 
 type bonjourRecord struct {
 	serviceName   string
@@ -36,14 +37,15 @@ func getMyFQDN() string {
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		log.Panic(err)
+		zconflog.Info().Println(err)
+		panic(err)
 	}
 	fqdn := out.String()
 	fqdn = fqdn[:len(fqdn)-1] // removing EOL
 	if strings.Index(fqdn, ".") < 0 {
 		fqdn = fqdn + ".local"
 	}
-	fmt.Println("FQDN: ", fqdn)
+	zconflog.Debug().Println("FQDN: ", fqdn)
 	return fqdn
 }
 
@@ -98,7 +100,7 @@ func makeAPBonjourRecord(raop *raop) *bonjourRecord {
 }
 
 func (r *bonjourRecord) Unpublish() {
-	fmt.Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
+	zconflog.Debug().Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
 	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Free", 0)
 	r.obj = nil
 }
@@ -114,7 +116,7 @@ func (r *bonjourRecord) Publish() error {
 	}
 	dconn, err = dbus.SystemBus()
 	if err != nil {
-		//		log.Fatal("Fatal error ", err.Error())
+		zconflog.Debug("dbus.SystemBus error ", err)
 		return err
 	}
 
@@ -138,7 +140,8 @@ func (r *bonjourRecord) Publish() error {
 		return c.Err
 	}
 	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
-	fmt.Println("Publishing! ", r.serviceName, " as service on port=", r.Port)
+	zconflog.Debug("Publishing! ", r.serviceName, " as service on port=", r.Port)
+
 	return nil
 }
 
@@ -216,7 +219,7 @@ func runResolver(requestChan chan reqFunc) {
 	requests := make(map[zeroconfResolveKey]*zeroconfResolveRequest)
 	dconn, err := dbus.SystemBus()
 	if err != nil {
-		fmt.FPrintln(os.Stderr, "Error getting DBUS: ", err)
+		zconflog.Info().Println(os.Stderr, "Error getting DBUS: ", err)
 		os.Exit(-1)	
 	}
 
@@ -228,7 +231,7 @@ func runResolver(requestChan chan reqFunc) {
 	for {
 		select {
 		case s := <-sigchan:
-			fmt.Println("Received signal: ", s)
+			zconflog.Debug().Println("Received signal: ", s)
 			switch s.Name {
 			case "org.freedesktop.Avahi.ServiceResolver.Found":
 				key := zeroconfResolveKey{s.Body[2].(string), s.Body[3].(string)}
@@ -241,10 +244,10 @@ func runResolver(requestChan chan reqFunc) {
 					if err == nil {
 						req.result <- &zeroconfResolveReply{addr, txt}
 					} else {
-						fmt.Fprintf(os.Stderr, "Could not resolve address '%s': %v\n", addr, err)
+						zconflog.Info.Println("Could not resolve address '", addr, "': ", err)
 					}
 				} else {
-					fmt.Fprintln(os.Stderr, "not looking for ", key)
+					zconflog.Info.Println("not looking for ", key)
 				}
 			}
 
@@ -262,12 +265,12 @@ func getRequestChan() chan reqFunc {
 func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
 	result := make(chan *zeroconfResolveReply, 4)
 	req := &zeroconfResolveRequest{zeroconfResolveKey{srvName, srvType}, result, nil}
-	fmt.Println("resolveService: name=", srvName, ", type=", srvType)
+	zconflog.Debug().Println("resolveService: name=", srvName, ", type=", srvType)
 	getRequestChan() <- func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest) {
-		fmt.Println("New Resolve Request: ", req)
+		zconflog.Debug().Println("New Resolve Request: ", req)
 		_, exists := requests[req.zeroconfResolveKey]
 		if exists {
-			fmt.Fprintln(os.Stderr, "The request ", req.zeroconfResolveKey, " is already being resolved")
+			zconflog.Info.Println("The request ", req.zeroconfResolveKey, " is already being resolved")
 		} else {
 			requests[req.zeroconfResolveKey] = req
 			newResolver(dconn, avahi, req)
@@ -278,17 +281,17 @@ func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
 
 func (req *zeroconfResolveRequest) close() {
 	getRequestChan() <- func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest) {
-		fmt.Println("Delete Resolve Request: ", req)
+		zconflog.Debug().Println("Delete Resolve Request: ", req)
 		_, exists := requests[req.zeroconfResolveKey]
 		if exists {
 			delete(requests, req.zeroconfResolveKey)
 			c := req.resolveObj.Call("org.freedesktop.Avahi.ServiceResolver.Free", 0)
 			err := c.Err
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error closing ResolveRequest: ", err)
+				zconflog.Info.Println(os.Stderr, "Error closing ResolveRequest: ", err)
 			}
 		} else {
-			fmt.Fprintln(os.Stderr, "The request ", req.zeroconfResolveKey, " doesn't exist!")
+			zconflog.Info.Println("The request ", req.zeroconfResolveKey, " doesn't exist!")
 		}
 	}
 }

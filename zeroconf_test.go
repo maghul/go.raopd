@@ -1,7 +1,6 @@
 package raopd
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -20,6 +19,6 @@ func TestZeroconfBrowse(t *testing.T) {
 	}
 
 	addr := <-req.result
-	fmt.Println("Got result: ", addr, addr.addr)
+	zconflog.Debug.Println("Got result: ", addr, addr.addr)
 	assert.NotNil(t, addr)
 }

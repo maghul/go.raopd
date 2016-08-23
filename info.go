@@ -16,7 +16,7 @@ type info struct {
 	key *rsa.PrivateKey // Move all code related to this here...
 }
 
-var authlog = logger.GetLogger("raopd.auth")
+var authlog = GetLogger("raopd.auth")
 
 func makeInfo(keyfilename string) (*info, error) {
 	i := &info{}
@@ -52,7 +52,7 @@ func ipToBytes(ipaddr net.IP) []byte {
 }
 
 func (i *info) decodeBase64(b64 string) ([]byte, error) {
-	fmt.Println("base64 string", b64)
+	authlog.Debug().Println("base64 string", b64)
 	enc := base64.RawStdEncoding
 	if b64[len(b64)-1] == '=' {
 		enc = base64.StdEncoding
@@ -69,20 +69,20 @@ func (i *info) rsaKeySign(b64digest string, ipaddr net.IP, hwaddr net.HardwareAd
 		return "", err
 	}
 
-	fmt.Println("digest", hex.Dump(digest))
+	authlog.Debug().Println("digest", hex.Dump(digest))
 	buffer.Write(digest)
 	length := 0
 	ipb := ipToBytes(ipaddr)
-	fmt.Println("len(ipaddr)=", len(ipaddr))
+	authlog.Debug().Println("len(ipaddr)=", len(ipaddr))
 	if len(ipb) == 4 {
-		fmt.Println("ipaddr IPv4", hex.Dump(ipb))
+		authlog.Debug().Println("ipaddr IPv4", hex.Dump(ipb))
 		length = 32
 	} else {
-		fmt.Println("ipaddr IPv6", hex.Dump(ipb))
+		authlog.Debug().Println("ipaddr IPv6", hex.Dump(ipb))
 		length = 38
 	}
 	buffer.Write(ipb)
-	fmt.Println("hwaddr", hex.Dump(hwaddr))
+	authlog.Debug().Println("hwaddr", hex.Dump(hwaddr))
 	buffer.Write(hwaddr)
 	buffer.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 	bb := buffer.Bytes()[0:length]

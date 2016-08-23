@@ -27,12 +27,12 @@ func readRaopResponse(cr *bufio.Reader) string {
 }
 
 func raopTxRx(cw *bufio.Writer, cr *bufio.Reader, msg string) string {
-	fmt.Println("------------------------------------------------------------------------------------------------------------------")
+	raoplog.Debug().Println("------------------------------------------------------------------------------------------------------------------")
 	cw.WriteString(msg)
 	cw.Flush()
 	response := readRaopResponse(cr)
-	fmt.Println("RX:", response)
-	fmt.Println("------------------------------------------------------------------------------------------------------------------")
+	raoplog.Debug().Println("RX:", response)
+	raoplog.Debug().Println("------------------------------------------------------------------------------------------------------------------")
 	return response
 }
 
@@ -46,7 +46,7 @@ func TestRaopSetup(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("RAOP session started...")
+	raoplog.Debug().Println("RAOP session started...")
 
 	assert.NotNil(t, raop)
 

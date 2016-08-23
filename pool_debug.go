@@ -18,7 +18,7 @@ type rtpPacket struct {
 var rtpPacketPoolCounter = 0
 var rtpPacketPool = &sync.Pool{New: func() interface{} {
 	rtpPacketPoolCounter++
-	fmt.Println("RTP PACKET POOL: Created ", rtpPacketPoolCounter, " RTP packets in pool")
+	log.Debug().Println("RTP PACKET POOL: Created ", rtpPacketPoolCounter, " RTP packets in pool")
 	return &rtpPacket{0, nil, make([]byte, max_rtp_packet_size), rtpPacketPoolCounter - 1}
 }}
 
@@ -26,7 +26,7 @@ var allocs = make(map[int]int)
 var allocmutex = new(sync.Mutex)
 
 func (pkt *rtpPacket) debug(ref string) {
-	fmt.Println(ref, ":", pkt.allocno, ", seq=", pkt.seqno)
+	log.Debug().Println(ref, ":", pkt.allocno, ", seq=", pkt.seqno)
 }
 
 func makeRtpPacket() *rtpPacket {
@@ -59,11 +59,11 @@ func getAllocs() []int {
 
 func init() {
 	go func() {
-		fmt.Println("ALLOCS STARTED")
+		log.Debug().Println("ALLOCS STARTED")
 		for {
 			time.Sleep(10 * time.Second)
 			for ii, v := range getAllocs() {
-				fmt.Println("ALLOCS: ", ii, "=", v)
+				log.Debug().Println("ALLOCS: ", ii, "=", v)
 			}
 		}
 	}()

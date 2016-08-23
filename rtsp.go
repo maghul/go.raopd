@@ -15,6 +15,8 @@ import (
 	"strings"
 )
 
+var rtsplog = getLogger("raopd.rtsp")
+
 /* It would have been nice to use the HTTP package since it is 99%
  * http. But the remaining 1% is important and impossible to tack on
  * to the http server.
@@ -124,7 +126,7 @@ func scanf(s, f string, t ...interface{}) bool {
 
 func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 	h := rw.Header()
-	h.Add("Cseq", req.Header["Cseq"][0])
+	h.Add("Cseq", req.Header.Get("Cseq"))
 	h.Add("Apple-Jack-Status", "connected; type=analog")
 
 	dacpid := req.Header.Get("Dacp-Id")
@@ -132,6 +134,8 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 	if dacpid != "" && activeremote != "" {
 		rs.raop.dacp.open(dacpid, activeremote)
 	}
+
+	rtsplog.Debug.Println("RTSP: method=", req.Method, ", client=", req.RemoteAddr)
 
 	switch req.Method {
 	case "OPTIONS":
@@ -155,10 +159,11 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		if ok {
 			clen, err := strconv.ParseInt(cl[0], 10, 32)
 			if err != nil {
+				rtsplog.Info.Println("Malformed Content-Length: ", clen, ":", err)
 				rw.WriteHeader(400)
 				return
 			}
-			fmt.Println("Content-Length=", clen)
+			rtsplog.Debug.Println("Content-Length=", clen)
 			rdr = io.LimitReader(req.Body, clen)
 		} else {
 			rdr = req.Body
@@ -181,12 +186,13 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		fmt.Println("AESKEY=", aeskey)
-		fmt.Println("AESIV=", aesiv)
+		rtsplog.Debug.Println("AESKEY=", aeskey)
+		rtsplog.Debug.Println("AESIV=", aesiv)
 		rs.raop.aeskey, err = aes.NewCipher(aeskey)
 		rs.raop.aesiv = aesiv
 
 		if err != nil {
+			rtsplog.Info.Println("Could not initialize cipher, key=", rs.raop.aeskey, ", :", err)
 			rw.WriteHeader(400)
 			return
 		}
@@ -197,28 +203,34 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 			rw.WriteHeader(500)
 			return
 		}
-		rs.raop.initAlac(rtpmap, fmtp)
-
+		err = rs.raop.initAlac(rtpmap, fmtp)
+		if err != nil {
+			rtsplog.Info.Println("Could not initialize ALAC:", err)
+			rw.WriteHeader(500)
+			return
+		}
 	case "SETUP":
 		raop := rs.raop
 
-		raop.clientUserAgent = req.Header["User-Agent"][0]
+		raop.clientUserAgent = req.Header.Get("User-Agent")
 
 		session := "DEADBEEF"
 
 		controlPort, timingPort, err := getPortsFromTransport(req.Header.Get("Transport"))
 		if err != nil {
+			rtsplog.Info.Println("Could not transport ports, Transport=", req.Header.Get("Transport"), ", :", err)
 			rw.WriteHeader(400)
 			return
 		}
 		local := req.URL.Host
-		fmt.Println("LOCAL IS ", local)
+		rtsplog.Debug.Println("LOCAL IS ", local)
 		zone, err := interfaceNameFromHost(local)
 		if err != nil {
-			fmt.Println("Could not find interface from host=", local, ", :", err)
+			rtsplog.Info.Println("Could not find interface from host=", local, ", :", err)
 			rw.WriteHeader(400)
 			return
 		}
+		rtsplog.Debug.Println("ZONE IS ", zone)
 		controlAddr := &net.UDPAddr{IP: raop.remote, Port: controlPort, Zone: zone}
 		timingAddr := &net.UDPAddr{IP: raop.remote, Port: timingPort, Zone: zone}
 
@@ -228,17 +240,17 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 				raop.timing.Port(), raop.control.Port(), raop.data.Port(), session)
 			h.Add("Transport", transport)
 		} else {
-			rtsplog.Info().Println("Failed to start RTP: ", err)
+			rtsplog.Info.Println("Failed to start RTP: ", err)
 			h.Add("FailureCause", err.Error())
 			rw.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 	case "GET_PARAMETER":
-		fmt.Println("GET_PARAMETER")
+		rtsplog.Debug.Println("GET_PARAMETER")
 		raop := rs.raop
 
-		raop.clientUserAgent = req.Header["User-Agent"][0]
+		raop.clientUserAgent = req.Header.Get("User-Agent")
 
 		content := bytes.NewBufferString("")
 		raop.getParameters(req.Body, content)
@@ -247,54 +259,71 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		io.Copy(rw, content)
 
 	case "SET_PARAMETER":
-		fmt.Println("SET_PARAMETER")
-		contentType := req.Header["Content-Type"][0]
+		rtsplog.Debug.Println("SET_PARAMETER")
+		contentType := req.Header.Get("Content-Type")
+		rtsplog.Debug.Println("SET_PARAMETER: Content-Type=", contentType)
 		switch contentType {
 		case "text/parameters":
 			s := readToString(req.Body)
 			s = strings.Trim(s, " \r\n")
+			rtsplog.Debug.Println("SET_PARAMETER: text/parameters: s=", s)
 			var vol float32
 			var start, current, end int64
 			switch {
 			case scanf(s, "volume: %f", &vol):
 				rs.raop.vol.SetServiceVolume(vol)
 			case scanf(s, "progress: %d/%d/%d", &start, &current, &end):
-				//				fmt.Println("progress:", start, current, end)
-				rs.raop.setProgress(start, current, end)
+				err := rs.raop.setProgress(start, current, end)
+				if err != nil {
+					rtsplog.Debug.Println("Could not set progress:", start, current, end, ", error=", err)
+				}
 			}
 		case "image/jpeg", "image/png":
+			rtsplog.Debug.Println("SET_PARAMETER: image: ")
 			loadCoverArt := false
-			si := rs.raop.plc.ServiceInfo()
+			si := rs.raop.sink.Info()
 			if si != nil {
 				loadCoverArt = si.SupportsCoverArt
 			}
 			if loadCoverArt {
 				buf, err := ioutil.ReadAll(req.Body)
 				if err != nil {
+					rtsplog.Info.Println("Could not load coverart data:", err)
 					return
 				}
-				rs.raop.plc.SetCoverArt(contentType, bytes.NewBuffer(buf).Bytes())
+				rs.raop.sink.SetCoverArt(contentType, bytes.NewBuffer(buf).Bytes())
 			} else {
 				io.Copy(ioutil.Discard, req.Body)
 			}
 		case "application/x-dmap-tagged":
-			daap, err := newDmap(req.Body)
-			if err != nil {
-				rtsplog.Info.Println("Could not load DAAP data:", err)
-				return
+			smd := ""
+			si := rs.raop.sink.Info()
+			if si != nil {
+				smd = si.SupportsMetaData
 			}
-			fmt.Println("daap=", daap)
-			// TODO: use the ServiceInfo
-			rs.raop.plc.SetMetadata(bytes.NewBufferString(daap.String("JSON")).String())
+			if smd != "" {
+				daap, err := newDmap(req.Body)
+				if err != nil {
+					rtsplog.Info.Println("Could not load DAAP data:", err)
+					return
+				}
+				rtsplog.Debug.Println("daap=", daap)
+				md := daap.String(smd)
+				if md != "" {
+					rs.raop.sink.SetMetadata(bytes.NewBufferString(md).String())
+				}
+			} else {
+				io.Copy(ioutil.Discard, req.Body)
+			}
 		default:
-			rtsplog.Info().Println("SET_PARAMETER: Unknown Content-Type=", contentType)
+			rtsplog.Info.Println("SET_PARAMETER: Unknown Content-Type=", contentType)
 
 		}
 	case "RECORD":
-		rs.raop.plc.Play()
+		rs.raop.sink.Play()
 	case "PAUSE":
-		fmt.Println("....................... PAUSE?")
-		rs.raop.plc.Pause()
+		rtsplog.Debug.Println("....................... PAUSE?")
+		rs.raop.sink.Pause()
 	case "FLUSH":
 	case "TEARDOWN":
 		rs.raop.teardown()
@@ -314,7 +343,7 @@ func (rs *rtspSession) runRtspServerSession(c net.Conn) {
 	for {
 		req, err := rs.readRequest(ioutil.NopCloser(c))
 		if err != nil {
-			fmt.Println("Ending RTSP session:", err)
+			rtsplog.Debug.Println("Ending RTSP session:", err)
 			return
 		}
 		rw := newRtspResponseWriter(wr)
@@ -346,10 +375,10 @@ func (rs *rtspSession) readRequest(rd io.ReadCloser) (req *http.Request, err err
 	tp := textproto.NewReader(brd)
 
 	if s, err = tp.ReadLine(); err != nil {
-		fmt.Println("READ REQUEST:H:", err)
+		rtsplog.Debug.Println("READ REQUEST:H:", err)
 		return
 	}
-	//	fmt.Println("RX:H:", s)
+	//	rtsplog.Debug.Println("RX:H:", s)
 	parts := strings.SplitN(s, " ", 3)
 	req.Method = parts[0]
 	if req.URL, err = url.Parse(parts[1]); err != nil {
@@ -364,10 +393,10 @@ func (rs *rtspSession) readRequest(rd io.ReadCloser) (req *http.Request, err err
 	// read headers
 	for {
 		if s, err = tp.ReadLine(); err != nil {
-			fmt.Println("READ REQUEST:C:", err)
+			rtsplog.Debug.Println("READ REQUEST:C:", err)
 			return
 		}
-		//		fmt.Println("RX:C:", s)
+		//		rtsplog.Debug.Println("RX:C:", s)
 		if s = strings.TrimRight(s, "\r\n"); s == "" {
 			break
 		}

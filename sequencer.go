@@ -6,10 +6,9 @@ import (
 	"time"
 )
 
-func emptyDebug(v ...interface{}) {
-}
+var seqlog = GetLogger("raopd.sequencer")
 
-var debug = emptyDebug
+const sequencerDebug = false
 
 type sequencer struct {
 	seq chan int
@@ -62,7 +61,6 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 		c := 0
 
 		transmit := func(pkt *rtpPacket) {
-			debug("TX: ", pkt.seqno)
 			delete(pkts, pkt.seqno)
 			outf(pkt)
 		}
@@ -75,13 +73,26 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 			gap := false
 			start := uint16(0)
 			count := uint16(0)
-			debug("REREQ: next=", next, ", entries=", entries)
+
 			for ii := next; entries > 0; ii++ {
 				pkt, ok := pkts[ii]
-				debug("REREQ: ii=", ii, " --> ok=", ok, ", ", pkt != nil)
+				if sequencerDebug {
+					state := "GAP"
+					if ok {
+						if pkt == nil {
+							state = "REQUESTED"
+						} else {
+							state = "OK"
+						}
+					}
+					seqlog.Debug().Println("gap ", ii, ", state=", state)
+				}
 				if ok {
 					if gap {
-						debug("TX:", start, ", ", count)
+						seqlog.Debug().Println("TX: REREQUEST", start, ", ", count)
+						if sequencerDebug {
+							fmt.Println("TX: REREQUEST", start, ", ", count)
+						}
 						request <- rerequest{start, count}
 						gap = false
 					}
@@ -99,6 +110,21 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 			}
 		}
 
+		flush := func() {
+			seqlog.Debug().Println("SEQUENCER: Flushing Sequencer")
+			for _, pkt := range pkts {
+				if pkt != nil {
+					pkt.Reclaim()
+				}
+			}
+			pkts = make(map[uint16]*rtpPacket)
+			initial = true
+			if c == 1 {
+				return
+			}
+			seqlog.Debug().Println("SEQUENCER: Flushed Sequencer")
+		}
+
 		defer func() {
 			if c == 0 {
 				panic("SEQUENCER: unexpected loop exit!")
@@ -113,7 +139,6 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 			if current != newTime {
 				current = newTime
 				timer.Reset(current)
-				debug("Rearming timer ", timer, " for ", current)
 			}
 
 			// Dump all packets possible from next onwards
@@ -126,12 +151,16 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 				next++
 			}
 
+			if initial {
+				if sequencerDebug {
+					seqlog.Debug().Println("SEQUENCER: Waiting for data to start")
+				}
+			}
 			select {
 			case pkt := <-data:
 				seqno := pkt.seqno
 				delta := seqnoDelta(seqno, next)
 
-				debug("RX:", seqno)
 				switch {
 				case initial:
 					initial = false
@@ -141,9 +170,9 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 					next = pkt.seqno + 1
 					transmit(pkt)
 
-				case delta > 200:
+				case delta > 2000:
 					fmt.Fprintln(os.Stderr, "SEQUENCER: Delta too large, ", delta, " flushing sequencer")
-					s.flush()
+					flush()
 
 				case delta > 0:
 					pkts[seqno] = pkt
@@ -159,22 +188,11 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 				}
 
 			case <-timer.C:
-				debug("TIMER TRIGGERED:", timer)
 				sendReRequests()
 				current = 0 // Force rearming the timer
 
 			case c = <-s.seq: // Flush
-				debug("SEQUENCER: Flushing Sequencer")
-				for _, pkt := range pkts {
-					if pkt != nil {
-						pkt.Reclaim()
-					}
-				}
-				pkts = make(map[uint16]*rtpPacket)
-				initial = true
-				if c == 1 {
-					return
-				}
+				flush()
 			}
 
 		}
