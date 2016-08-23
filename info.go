@@ -26,22 +26,64 @@ func makeInfo(keyfile io.Reader) (*info, error) {
 	return i, nil
 }
 
+var ipv4prefix = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}
+
+func isIPv4(ipaddr net.IP) bool {
+	for ii, cb := range ipv4prefix {
+		if ipaddr[ii] != cb {
+			return false
+		}
+	}
+	return true
+}
+
+func ipToBytes(ipaddr net.IP) []byte {
+	ipb := []byte(ipaddr)
+	if len(ipb) == 4 {
+		return ipb
+	}
+	if isIPv4(ipaddr) {
+		return ipaddr[12:16]
+	} else {
+		return ipaddr
+	}
+}
+
+func (i *info) decodeBase64(b64 string) ([]byte, error) {
+	fmt.Println("base64 string", b64)
+	enc := base64.RawStdEncoding
+	if b64[len(b64)-1] == '=' {
+		enc = base64.StdEncoding
+	}
+
+	return enc.DecodeString(b64)
+}
+
 func (i *info) rsaKeySign(b64digest string, ipaddr net.IP, hwaddr net.HardwareAddr) (string, error) {
 	buffer := bytes.NewBufferString("")
 
-	digest, err := base64.StdEncoding.DecodeString(b64digest)
+	digest, err := i.decodeBase64(b64digest)
 	if err != nil {
 		return "", err
 	}
 
 	fmt.Println("digest", hex.Dump(digest))
 	buffer.Write(digest)
-	// TODO: An IPv4 address wont work
-	fmt.Println("ipaddr", hex.Dump(ipaddr))
-	buffer.Write(ipaddr)
+	length := 0
+	ipb := ipToBytes(ipaddr)
+	fmt.Println("len(ipaddr)=", len(ipaddr))
+	if len(ipb) == 4 {
+		fmt.Println("ipaddr IPv4", hex.Dump(ipb))
+		length = 32
+	} else {
+		fmt.Println("ipaddr IPv6", hex.Dump(ipb))
+		length = 38
+	}
+	buffer.Write(ipb)
 	fmt.Println("hwaddr", hex.Dump(hwaddr))
 	buffer.Write(hwaddr)
-	bb := buffer.Bytes()[0:buffer.Len()]
+	buffer.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+	bb := buffer.Bytes()[0:length]
 	dst, err := rsa.SignPKCS1v15(nil, i.key, 0, bb)
 	if err != nil {
 		return "", err
@@ -53,7 +95,7 @@ func (i *info) rsaKeySign(b64digest string, ipaddr net.IP, hwaddr net.HardwareAd
 func (i *info) rsaKeyDecrypt(b64encrypted string) ([]byte, error) {
 	label := []byte{}
 
-	encrypted, err := base64.StdEncoding.DecodeString(b64encrypted)
+	encrypted, err := i.decodeBase64(b64encrypted)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +108,7 @@ func (i *info) rsaKeyDecrypt(b64encrypted string) ([]byte, error) {
 }
 
 func (i *info) rsaKeyParseIv(iv string) ([]byte, error) {
-	dec, err := base64.StdEncoding.DecodeString(iv)
+	dec, err := i.decodeBase64(iv)
 	if err != nil {
 		return nil, err
 	}
