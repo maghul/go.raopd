@@ -5,9 +5,9 @@ import (
 )
 
 /*
-This structure is passed to
+AirplaySinkInfo contains data about the AirplaySink instance.
 */
-type ServiceInfo struct {
+type SinkInfo struct {
 	// If the service supports absolute volume, 0 - 100
 	SupportsAbsoluteVolume bool
 
@@ -34,11 +34,13 @@ type ServiceInfo struct {
 }
 
 /*
-This is the interface for the service implementation
+AirplaySink is the interface necessary to implement to act as an Airplay output device.
+This interface should be registered with the AirplaySinkCollection and will then be
+available as an airplay output.
 */
-type Service interface {
+type Sink interface {
 	// Get the service info for the service.
-	ServiceInfo() *ServiceInfo
+	Info() *SinkInfo
 
 	// Get a writer for the audio stream. Only raw PCM with two channel
 	// 16-bit depth at 44100 samples/second is currently supported.
@@ -70,5 +72,8 @@ type Service interface {
 	Pause()
 
 	// Called when the connection to source is terminated
-	Close()
+	Stopped()
+
+	// Called when the sink has been closed and removed
+	Closed()
 }

@@ -11,10 +11,10 @@ import (
 )
 
 type raop struct {
-	rf *ServiceRegistry
-	l  net.Listener
+	acs *SinkCollection
+	l   net.Listener
 
-	plc Service
+	sink Sink
 	audioStreams
 
 	hwaddr net.HardwareAddr
@@ -43,7 +43,7 @@ func (r *raop) String() string {
 }
 
 func (r *raop) startRtspProcess() (err error) {
-	si := r.plc.ServiceInfo()
+	si := r.sink.Info()
 	r.hwaddr = si.HardwareAddress
 
 	r.l, err = net.Listen("tcp", fmt.Sprintf(":%d", si.Port))
@@ -64,7 +64,7 @@ func (r *raop) startRtspProcess() (err error) {
 func (r *raop) startRaopProcess() {
 	r.dacp = newDacp()
 
-	r.vol = newVolumeHandler(r.plc.SetVolume, r.dacp.tx)
+	r.vol = newVolumeHandler(r.sink.Info(), r.sink.SetVolume, r.dacp.tx)
 
 	r.audioBuffer = make([]byte, 8192)
 
@@ -115,7 +115,7 @@ func (r *raop) setRemote(remote string) error {
 }
 
 func (r *raop) teardown() {
-	r.plc.Close()
+	r.sink.Stopped()
 	r.sequencer.stop()
 	r.data.Close()
 	r.control.Close()
@@ -165,5 +165,5 @@ func (r *raop) setProgress(start, current, end int64) {
 	position := r.rtptoms(current - start)
 	duration := r.rtptoms(end - start)
 
-	r.plc.SetProgress(position, duration)
+	r.sink.SetProgress(position, duration)
 }

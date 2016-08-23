@@ -16,10 +16,10 @@ import (
 type testClient struct {
 	volume   float32
 	pos, end int
-	si       *ServiceInfo
+	si       *SinkInfo
 }
 
-func (tc *testClient) ServiceInfo() *ServiceInfo {
+func (tc *testClient) Info() *SinkInfo {
 	return tc.si
 }
 
@@ -50,6 +50,18 @@ func (tc *testClient) Close() {
 	rtsplog.Debug.Println("TEST CLIENT:", "Close...")
 }
 
+func (tc *testClient) Stopped() {
+	rtsplog.Debug.Println("TEST CLIENT:", "Stopped...")
+}
+
+func (tc *testClient) Closed() {
+	rtsplog.Debug.Println("TEST CLIENT:", "Closed...")
+}
+
+func (tc *testClient) Connected(name string) {
+	rtsplog.Debug.Println("TEST CLIENT:", "Closed...")
+}
+
 func (tc *testClient) AudioWriter() io.Writer {
 	rtsplog.Debug.Println("TEST CLIENT:", "AudioWrite")
 	panic("I'm sorry Dave, I can't allow you to do that.")
@@ -59,9 +71,9 @@ func (tc *testClient) AudioWriterErr(err error) {
 	rtsplog.Debug.Println("TEST CLIENT:", "AudioWriterErr", err)
 }
 
-func makeTestClient() Service {
+func makeTestClient() Sink {
 	tc := &testClient{}
-	tc.si = &ServiceInfo{}
+	tc.si = &SinkInfo{}
 	tc.si.Port = 15100
 	tc.si.HardwareAddress, _ = net.ParseMAC("11:22:33:13:37:17")
 	return tc
@@ -78,7 +90,7 @@ func makeTestRtspSession() *rtspSession {
 	r.dacp.crc = make(chan func() error, 12)
 
 	r.initAlac("x", "96 352 0 16 40 10 14 2 255 0 0 44100")
-	r.plc = makeTestClient()
+	r.sink = makeTestClient()
 
 	r.vol = &volumeHandler{}
 	r.vol.deviceVolumeChan = make(chan float32, 8)
@@ -331,8 +343,8 @@ progress: 866155144/880664705/900835976
 `
 	r := makeTestRtspSession()
 
-	fmtp := "96 352 0 16 40 10 14 2 255 0 0 44100"
-	r.raop.alacConf = alac.NewAlacConfFromFmtp(fmtp)
+	//fmtp := "96 352 0 16 40 10 14 2 255 0 0 44100"
+	//	r.raop.alacConf = alac.NewAlacConfFromFmtp(fmtp)
 
 	resp, err := request(r, req)
 
@@ -342,7 +354,7 @@ progress: 866155144/880664705/900835976
 	ha.assert("42", "Cseq")
 	ha.assert("connected; type=analog", "Apple-Jack-Status")
 
-	tc := r.raop.plc.(*testClient)
+	tc := r.raop.sink.(*testClient)
 	assert.Equal(t, 329014, tc.pos)
 	assert.Equal(t, 786413, tc.end)
 

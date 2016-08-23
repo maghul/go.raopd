@@ -41,9 +41,9 @@ func (v *volumeHandler) SetServiceVolume(vol float32) {
 	v.deviceVolumeChan <- vol
 }
 
-func newVolumeHandler(setServiceVolume func(volume float32), send func(cmd string)) *volumeHandler {
+func newVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), send func(cmd string)) *volumeHandler {
 	v := &volumeHandler{}
-	v.startVolumeHandler(setServiceVolume, send)
+	v.startVolumeHandler(info, setServiceVolume, send)
 	return v
 }
 
@@ -56,13 +56,10 @@ func between(a, b, c float32) bool {
 	}
 }
 
-func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32), send func(cmd string)) {
+func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), send func(cmd string)) {
 
 	v.serviceVolumeChan = make(chan float32, 8)
 	v.deviceVolumeChan = make(chan float32, 8)
-
-	// TODO: Get this from ServiceInfo
-	absoluteVolume := false
 
 	serviceVolume := float32(0)
 	targetVolume := float32(0)
@@ -80,7 +77,7 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 		serviceVolume = ios2decVolume(v.deviceVolume)
 		volumelog.Debug.Println("serviceVolume=", serviceVolume)
 		for {
-			if absoluteVolume {
+			if info.SupportsAbsoluteVolume {
 
 				// Absolute volume mode. Try to match the volume on the iDevice to the volume
 				// on the service by pushing volume up and down

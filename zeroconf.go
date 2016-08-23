@@ -78,7 +78,7 @@ func makeAPBonjourRecord(raop *raop) *bonjourRecord {
 	hwaddr := hardwareAddressToServicePrefix(raop.hwaddr)
 	port := raop.port()
 
-	r.serviceName = fmt.Sprintf("%s@%s", hwaddr, raop.plc.ServiceInfo().Name)
+	r.serviceName = fmt.Sprintf("%s@%s", hwaddr, raop.sink.Info().Name)
 	r.serviceType = "_raop._tcp"
 	r.serviceDomain = "local" // sdomain
 	r.serviceHost = fqdn      // shost

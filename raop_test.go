@@ -37,18 +37,19 @@ func raopTxRx(cw *bufio.Writer, cr *bufio.Reader, msg string) string {
 }
 
 func TestRaopSetup(t *testing.T) {
-	rf, err := NewServiceRegistry("testdata/airport.key")
+	rf, err := NewSinkCollection("testdata/airport.key")
 	if err != nil {
 		panic(err)
 	}
 
-	raop, err := rf.RegisterService(makeTestClient())
+	source, err := rf.Register(makeTestClient())
 	if err != nil {
 		panic(err)
 	}
 	raoplog.Debug.Println("RAOP session started...")
+	assert.Equal(t, "RAOP: hw=11:22:33:13:37:17", source.raop.String())
+	assert.NotNil(t, source)
 
-	assert.NotNil(t, raop)
 
 	conn, err := net.Dial("tcp", "127.0.0.1:15100")
 	if err != nil {
