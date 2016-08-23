@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/guelfey/go.dbus"
@@ -133,4 +135,138 @@ func (r *bonjourRecord) Publish() error {
 	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
 	fmt.Println("Publishing! ", r.serviceName, " as service on port=", r.Port)
 	return nil
+}
+
+// -------------------------- resolve ---------------------------------------------------------------
+
+type zeroconfResolveKey struct {
+	srvName string
+	srvType string
+}
+
+type zeroconfResolveRequest struct {
+	zeroconfResolveKey
+	result     chan *zeroconfResolveReply
+	resolveObj *dbus.Object
+}
+
+type zeroconfResolveReply struct {
+	addr *net.TCPAddr
+	txt  []string
+}
+
+var requestChan chan *zeroconfResolveRequest
+
+func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
+	if requestChan == nil {
+		requestChan = make(chan *zeroconfResolveRequest, 5)
+		go runResolver(requestChan)
+
+	}
+	result := make(chan *zeroconfResolveReply, 4)
+	req := &zeroconfResolveRequest{zeroconfResolveKey{srvName, srvType}, result, nil}
+	fmt.Println("resolveService: name=", srvName, ", type=", srvType)
+	requestChan <- req
+	return req, nil
+}
+
+func newResolver(dconn *dbus.Conn, avahi *dbus.Object, req *zeroconfResolveRequest) error {
+	c := avahi.Call("org.freedesktop.Avahi.Server.ServiceResolverNew", 0,
+		int32(-1), // avahi.IF_UNSPEC
+		int32(-1), // avahi.PROTO_UNSPEC
+		req.srvName,
+		req.srvType,
+		"local",
+		int32(-1), // avahi.PROTO_UNSPEC
+		uint32(0))
+	if c.Err != nil {
+		return c.Err
+	}
+
+	var path dbus.ObjectPath
+	err := c.Store(&path)
+	if err != nil {
+		return err
+	}
+	req.resolveObj = dconn.Object("org.freedesktop.Avahi", path)
+
+	return nil
+}
+
+func toStringArray(d [][]byte) []string {
+	r := make([]string, len(d))
+	for ii := 0; ii < len(d); ii++ {
+		r[ii] = string(d[ii])
+	}
+	return r
+}
+
+func (zrr *zeroconfResolveRequest) Close() {
+	//panic("NYI")
+}
+
+func toTCPAddr(addr, port string) (*net.TCPAddr, error) {
+	ip := net.ParseIP(addr)
+	p, err := strconv.ParseInt(port, 10, 0)
+	if err != nil {
+		return nil, err
+	}
+	a := &net.TCPAddr{IP: ip, Port: int(p), Zone: ""}
+	return a, nil
+}
+
+func toString(i interface{}) string {
+	s := fmt.Sprintf("%v", i)
+	return s
+}
+
+func runResolver(requestChan chan *zeroconfResolveRequest) {
+	//	browsers := make(map[string]*browser)
+	requests := make(map[zeroconfResolveKey]*zeroconfResolveRequest)
+	dconn, err := dbus.SystemBus()
+	if err != nil {
+		fmt.FPrintln(os.Stderr, "Error getting DBUS: ", err)
+		os.Exit(-1)	
+	}
+
+	sigchan := make(chan *dbus.Signal, 32)
+	dconn.Signal(sigchan)
+
+	avahi := dconn.Object("org.freedesktop.Avahi", "/")
+
+	for {
+		select {
+		case s := <-sigchan:
+			fmt.Println("Received signal: ", s)
+			switch s.Name {
+			case "org.freedesktop.Avahi.ServiceResolver.Found":
+				key := zeroconfResolveKey{s.Body[2].(string), s.Body[3].(string)}
+				req := requests[key]
+				if req != nil {
+					// Ok: lets get the IP address and port...
+					//					ipp := fmt.Sprintf("%s:%d", s.Body[7], s.Body[8])
+					addr, err := toTCPAddr(toString(s.Body[7]), toString(s.Body[8]))
+					txt := toStringArray(s.Body[9].([][]byte))
+					if err == nil {
+						req.result <- &zeroconfResolveReply{addr, txt}
+					} else {
+						fmt.Fprintf(os.Stderr, "Could not resolve address '%s': %v\n", addr, err)
+					}
+				} else {
+					fmt.Fprintln(os.Stderr, "not looking for ", key)
+				}
+			}
+
+		case r := <-requestChan:
+			fmt.Println("New Resolve Request: ", r)
+			_, exists := requests[r.zeroconfResolveKey]
+			if exists {
+				fmt.Fprintln(os.Stderr, "The request ", r.zeroconfResolveKey, " is already being resolved")
+			} else {
+				requests[r.zeroconfResolveKey] = r
+				newResolver(dconn, avahi, r)
+			}
+		}
+	}
+
 }
