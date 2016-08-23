@@ -68,7 +68,7 @@ func makeTestClient() Service {
 }
 
 func makeTestRtspSession() *rtspSession {
-	i, err := makeInfo(getKeyfile())
+	i, err := makeInfo("testdata/airport.key")
 	if err != nil {
 		panic(err)
 	}

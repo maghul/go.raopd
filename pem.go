@@ -20,7 +20,11 @@ func getRSAPrivateKey(r io.Reader) (*rsa.PrivateKey, error) {
 		return nil, err
 	}
 
-	priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	return getPrivateKey(block.Bytes)
+}
+
+func getPrivateKey(bytes []byte) (*rsa.PrivateKey, error) {
+	priv, err := x509.ParsePKCS1PrivateKey(bytes)
 	if err != nil {
 		return nil, err
 	}

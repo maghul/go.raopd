@@ -20,10 +20,10 @@ type ServiceRef struct {
 Create a service registry initialized with the RSA encryption key
 used by all services. The keyfile should be in PEM format.
 */
-func NewServiceRegistry(keyfile io.Reader) (*ServiceRegistry, error) {
-	rf := &ServiceRegistry{}
+func NewAirplaySinkCollection(keyfilename string) (*AirplaySinkCollection, error) {
+	rf := &AirplaySinkCollection{}
 	var err error
-	rf.i, err = makeInfo(keyfile)
+	rf.i, err = makeInfo(keyfilename)
 	if err != nil {
 		return nil, err
 	}

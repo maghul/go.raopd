@@ -7,8 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net"
+	"os"
 )
 
 // Contains generic information relevant to all servers/clients
@@ -16,14 +16,16 @@ type info struct {
 	key *rsa.PrivateKey // Move all code related to this here...
 }
 
-func makeInfo(keyfile io.Reader) (*info, error) {
-	var err error
+var authlog = logger.GetLogger("raopd.auth")
+
+func makeInfo(keyfilename string) (*info, error) {
 	i := &info{}
-	i.key, err = getRSAPrivateKey(keyfile)
+	file, err := os.Open(keyfilename)
 	if err != nil {
 		return nil, err
 	}
-	return i, nil
+	i.key, err = getRSAPrivateKey(file)
+	return i, err
 }
 
 var ipv4prefix = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}

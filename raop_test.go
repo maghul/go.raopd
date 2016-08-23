@@ -4,21 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
-
-func getKeyfile() io.Reader {
-	f, err := os.Open("/tmp/airport.key")
-	if err != nil {
-		panic("No key found...")
-	}
-	return f
-}
 
 func readRaopResponse(cr *bufio.Reader) string {
 	b := bytes.NewBufferString("")
@@ -46,7 +37,7 @@ func raopTxRx(cw *bufio.Writer, cr *bufio.Reader, msg string) string {
 }
 
 func TestRaopSetup(t *testing.T) {
-	rf, err := NewServiceRegistry(getKeyfile())
+	rf, err := NewServiceRegistry("testdata/airport.key")
 	if err != nil {
 		panic(err)
 	}
