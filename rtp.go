@@ -2,12 +2,13 @@ package raopd
 
 import (
 	"bytes"
+	"emh/logger"
 	"encoding/binary"
 	"fmt"
 	"net"
 )
 
-var rtplog = GetLogger("raopd.rtp")
+var rtplog = logger.GetLogger("raopd.rtp")
 
 const max_rtp_packet_size = 1800
 
@@ -37,7 +38,7 @@ func (r *raop) getDataHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter, s
 		if pkt.payloadType() == 96 {
 			r.seqchan <- pkt
 		} else {
-			rtplog.Debug().Println(prefix, " unknown payload type ", pkt.payloadType())
+			rtplog.Debug.Println(prefix, " unknown payload type ", pkt.payloadType())
 			pkt.Reclaim()
 		}
 	}, nil, "DATA"
@@ -54,17 +55,17 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 			pkt.Reclaim()
 
 		case 85:
-			rtplog.Debug().Println(prefix, "A retransmit request should not be received here")
+			rtplog.Debug.Println(prefix, "A retransmit request should not be received here")
 			pkt.Reclaim()
 
 		case 86:
 			pkt.content = pkt.content[4:]
 			pkt.seqno = binary.BigEndian.Uint16(pkt.content[2:4])
-			rtplog.Debug().Println(prefix, "Recovery Packet, seqno=", pkt.seqno)
+			rtplog.Debug.Println(prefix, "Recovery Packet, seqno=", pkt.seqno)
 			r.seqchan <- pkt
 
 		default:
-			rtplog.Debug().Println(prefix, "Unknown payload type ", pkt.payloadType())
+			rtplog.Debug.Println(prefix, "Unknown payload type ", pkt.payloadType())
 			pkt.Reclaim()
 		}
 	}
@@ -76,7 +77,7 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 		for {
 			select {
 			case rr := <-r.rrchan:
-				rtplog.Debug().Println(prefix, "ReRequest:", seqno, ", rr=", rr)
+				rtplog.Debug.Println(prefix, "ReRequest:", seqno, ", rr=", rr)
 				buf[0] = 0x80
 				buf[1] = 85 + 0x80
 				binary.BigEndian.PutUint16(buf[2:4], seqno)
@@ -84,7 +85,7 @@ func (r *raop) getControlHandler(raddr *net.UDPAddr) (rtpHandler, rtpTransmitter
 				binary.BigEndian.PutUint16(buf[6:8], rr.count)
 
 				conn.Write(buf[0:8])
-				rtplog.Debug().Println(prefix, "Recovery Request:", rr, " sent to ", conn.RemoteAddr())
+				rtplog.Debug.Println(prefix, "Recovery Request:", rr, " sent to ", conn.RemoteAddr())
 			}
 			seqno++
 		}
@@ -112,10 +113,10 @@ func startRtp(f rtpFactory, raddr *net.UDPAddr) (*rtp, error) {
 	var err error
 
 	if raddr == nil {
-		rtplog.Debug().Println("LISTENING")
+		rtplog.Debug.Println("LISTENING")
 		conn, err = net.ListenUDP("udp", nil)
 	} else {
-		rtplog.Debug().Println("DIALING raddr=", raddr)
+		rtplog.Debug.Println("DIALING raddr=", raddr)
 		conn, err = net.DialUDP("udp", nil, raddr)
 	}
 	if err != nil {
@@ -123,7 +124,7 @@ func startRtp(f rtpFactory, raddr *net.UDPAddr) (*rtp, error) {
 	}
 
 	handler, tx, name := f(raddr)
-	rtplog.Debug().Println("Starting RTP server ", name, " at conn local=", conn.LocalAddr(), ", remote=", conn.RemoteAddr())
+	rtplog.Debug.Println("Starting RTP server ", name, " at conn local=", conn.LocalAddr(), ", remote=", conn.RemoteAddr())
 	if handler != nil {
 		go func() {
 			defer func() { conn.Close() }()
@@ -134,7 +135,7 @@ func startRtp(f rtpFactory, raddr *net.UDPAddr) (*rtp, error) {
 				var err error
 				n, err = conn.Read(pkt.buf)
 				if err != nil {
-					rtplog.Info().Println("Panic err=", err)
+					rtplog.Info.Println("Panic err=", err)
 					return // Exit RTP server
 				}
 				pkt.content = pkt.buf[0:n]

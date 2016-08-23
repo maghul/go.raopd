@@ -1,6 +1,7 @@
 package raopd
 
 import (
+	"emh/logger"
 	"errors"
 	"fmt"
 	"net"
@@ -8,7 +9,7 @@ import (
 	"strings"
 )
 
-var netlog = GetLogger("raopd.net")
+var netlog = logger.GetLogger("raopd.net")
 
 func getPortsFromTransport(transport string) (control int, timing int, err error) {
 	ts := strings.Split(transport, ";")
@@ -39,7 +40,7 @@ func cToIP(host string) (net.IP, error) {
 		return nil, errors.New(fmt.Sprintf("Unknown C record '%s'", host))
 	}
 	a := net.ParseIP(host[7:])
-	netlog.Debug().Println("HOST IS", a)
+	netlog.Debug.Println("HOST IS", a)
 	if a == nil {
 		return nil, errors.New(fmt.Sprintf("Unparsable IP address '%s'", host[7:]))
 	}

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/aes"
+	"emh/logger"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,7 +16,7 @@ import (
 	"strings"
 )
 
-var rtsplog = getLogger("raopd.rtsp")
+var rtsplog = logger.GetLogger("raopd.rtsp")
 
 /* It would have been nice to use the HTTP package since it is 99%
  * http. But the remaining 1% is important and impossible to tack on
@@ -126,7 +127,7 @@ func scanf(s, f string, t ...interface{}) bool {
 
 func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 	h := rw.Header()
-	h.Add("Cseq", req.Header.Get("Cseq"))
+	h.Add("Cseq", req.Header["Cseq"][0])
 	h.Add("Apple-Jack-Status", "connected; type=analog")
 
 	dacpid := req.Header.Get("Dacp-Id")
@@ -212,7 +213,7 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 	case "SETUP":
 		raop := rs.raop
 
-		raop.clientUserAgent = req.Header.Get("User-Agent")
+		raop.clientUserAgent = req.Header["User-Agent"][0]
 
 		session := "DEADBEEF"
 
@@ -250,7 +251,7 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 		rtsplog.Debug.Println("GET_PARAMETER")
 		raop := rs.raop
 
-		raop.clientUserAgent = req.Header.Get("User-Agent")
+		raop.clientUserAgent = req.Header["User-Agent"][0]
 
 		content := bytes.NewBufferString("")
 		raop.getParameters(req.Body, content)
@@ -260,28 +261,23 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 
 	case "SET_PARAMETER":
 		rtsplog.Debug.Println("SET_PARAMETER")
-		contentType := req.Header.Get("Content-Type")
-		rtsplog.Debug.Println("SET_PARAMETER: Content-Type=", contentType)
+		contentType := req.Header["Content-Type"][0]
 		switch contentType {
 		case "text/parameters":
 			s := readToString(req.Body)
 			s = strings.Trim(s, " \r\n")
-			rtsplog.Debug.Println("SET_PARAMETER: text/parameters: s=", s)
 			var vol float32
 			var start, current, end int64
 			switch {
 			case scanf(s, "volume: %f", &vol):
 				rs.raop.vol.SetServiceVolume(vol)
 			case scanf(s, "progress: %d/%d/%d", &start, &current, &end):
-				err := rs.raop.setProgress(start, current, end)
-				if err != nil {
-					rtsplog.Debug.Println("Could not set progress:", start, current, end, ", error=", err)
-				}
+				//				rtsplog.Debug().Println("progress:", start, current, end)
+				rs.raop.setProgress(start, current, end)
 			}
 		case "image/jpeg", "image/png":
-			rtsplog.Debug.Println("SET_PARAMETER: image: ")
 			loadCoverArt := false
-			si := rs.raop.sink.Info()
+			si := rs.raop.plc.ServiceInfo()
 			if si != nil {
 				loadCoverArt = si.SupportsCoverArt
 			}
@@ -291,13 +287,13 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 					rtsplog.Info.Println("Could not load coverart data:", err)
 					return
 				}
-				rs.raop.sink.SetCoverArt(contentType, bytes.NewBuffer(buf).Bytes())
+				rs.raop.plc.SetCoverArt(contentType, bytes.NewBuffer(buf).Bytes())
 			} else {
 				io.Copy(ioutil.Discard, req.Body)
 			}
 		case "application/x-dmap-tagged":
 			smd := ""
-			si := rs.raop.sink.Info()
+			si := rs.raop.plc.ServiceInfo()
 			if si != nil {
 				smd = si.SupportsMetaData
 			}
@@ -320,10 +316,10 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 
 		}
 	case "RECORD":
-		rs.raop.sink.Play()
+		rs.raop.plc.Play()
 	case "PAUSE":
 		rtsplog.Debug.Println("....................... PAUSE?")
-		rs.raop.sink.Pause()
+		rs.raop.plc.Pause()
 	case "FLUSH":
 	case "TEARDOWN":
 		rs.raop.teardown()

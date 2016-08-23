@@ -1,8 +1,10 @@
 package raopd
 
-import ()
+import (
+	"emh/logger"
+)
 
-var volumelog = GetLogger("raopd.volume")
+var volumelog = logger.GetLogger("raopd.volume")
 
 // Handle volume changes.
 
@@ -76,7 +78,7 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 	go func() {
 		v.deviceVolume = <-v.deviceVolumeChan
 		serviceVolume = ios2decVolume(v.deviceVolume)
-		volumelog.Debug().Println("serviceVolume=", serviceVolume)
+		volumelog.Debug.Println("serviceVolume=", serviceVolume)
 		for {
 			if absoluteVolume {
 
@@ -88,11 +90,11 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 					case dVolume := <-v.deviceVolumeChan:
 						v.deviceVolume = dVolume
 						serviceVolume = ios2decVolume(dVolume)
-						//volumelog.Debug().Println( "deviceVolume=", deviceVolume, ", serviceVolume=", serviceVolume )
+						//volumelog.Debug.Println( "deviceVolume=", deviceVolume, ", serviceVolume=", serviceVolume )
 						setServiceVolume(serviceVolume)
 
 					case targetVolume = <-v.serviceVolumeChan:
-						//volumelog.Debug().Println( "targetVolume=", targetVolume )
+						//volumelog.Debug.Println( "targetVolume=", targetVolume )
 						volChange(targetVolume > serviceVolume)
 						break normal
 					}
@@ -110,12 +112,12 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 							break finder
 						}
 
-						//volumelog.Debug().Println( "deviceVolume=", deviceVolume, ", targetVolume=", targetVolume, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+						//volumelog.Debug.Println( "deviceVolume=", deviceVolume, ", targetVolume=", targetVolume, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
 						serviceVolume = newVolume
 						volChange(targetVolume > serviceVolume)
 
 					case targetVolume = <-v.serviceVolumeChan:
-						//volumelog.Debug().Println( "INTER targetVolume=", targetVolume )
+						//volumelog.Debug.Println( "INTER targetVolume=", targetVolume )
 						volChange(targetVolume > serviceVolume)
 					}
 				}
@@ -123,29 +125,29 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 				// Relative volume mode: Send up and down volume to the service while
 				// keeping the iDevice volume at the center.
 				if serviceVolume > 55 && serviceVolume < 45 {
-					volumelog.Debug().Println("------ KICK!")
+					volumelog.Debug.Println("------ KICK!")
 					volChange(50 > serviceVolume)
 				}
-				volumelog.Debug().Println("In relative volume normal mode")
+				volumelog.Debug.Println("In relative volume normal mode")
 			normal_r:
 				for {
 					select {
 					case dVolume := <-v.deviceVolumeChan:
 						v.deviceVolume = dVolume
 						newVolume := ios2decVolume(dVolume)
-						//volumelog.Debug().Println( "nr: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+						//volumelog.Debug.Println( "nr: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
 
 						if newVolume > serviceVolume && newVolume > 50 {
-							volumelog.Debug().Println("VOLUME UP")
+							volumelog.Debug.Println("VOLUME UP")
 							setServiceVolume(1000)
 						}
 
 						if newVolume < serviceVolume && newVolume < 50 {
-							volumelog.Debug().Println("VOLUME DOWN")
+							volumelog.Debug.Println("VOLUME DOWN")
 							setServiceVolume(-1000)
 						}
 
-						volumelog.Debug().Println("vol change...")
+						volumelog.Debug.Println("vol change...")
 						serviceVolume = newVolume
 						volChange(50 > serviceVolume)
 						break normal_r
@@ -155,25 +157,25 @@ func (v *volumeHandler) startVolumeHandler(setServiceVolume func(volume float32)
 					}
 				}
 
-				volumelog.Debug().Println("In relative volume bounce mode")
+				volumelog.Debug.Println("In relative volume bounce mode")
 			bounce_r:
 				for {
 					select {
 					case dVolume := <-v.deviceVolumeChan:
 						v.deviceVolume = dVolume
 						newVolume := ios2decVolume(dVolume)
-						//volumelog.Debug().Println( "br: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
+						//volumelog.Debug.Println( "br: deviceVolume=", v.deviceVolume, ", targetVolume=", 50, ", newVolume=", newVolume, ", serviceVolume=", serviceVolume )
 						if between(newVolume, 50, serviceVolume) && newVolume < 55 && newVolume > 45 {
 							serviceVolume = newVolume
 							break bounce_r
 						} else {
 							if newVolume > serviceVolume && newVolume > 50 {
-								volumelog.Debug().Println("VOLUME UP")
+								volumelog.Debug.Println("VOLUME UP")
 								setServiceVolume(1000)
 							}
 
 							if newVolume < serviceVolume && newVolume < 50 {
-								volumelog.Debug().Println("VOLUME DOWN")
+								volumelog.Debug.Println("VOLUME DOWN")
 								setServiceVolume(-1000)
 							}
 

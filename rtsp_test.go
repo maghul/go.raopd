@@ -39,24 +39,24 @@ func (tc *testClient) SetProgress(pos, end int) {
 }
 
 func (tc *testClient) Play() {
-	rtsplog.Debug().Println("TEST CLIENT:", "Play...")
+	rtsplog.Debug.Println("TEST CLIENT:", "Play...")
 }
 
 func (tc *testClient) Pause() {
-	rtsplog.Debug().Println("TEST CLIENT:", "Pause...")
+	rtsplog.Debug.Println("TEST CLIENT:", "Pause...")
 }
 
 func (tc *testClient) Close() {
-	rtsplog.Debug().Println("TEST CLIENT:", "Close...")
+	rtsplog.Debug.Println("TEST CLIENT:", "Close...")
 }
 
 func (tc *testClient) AudioWriter() io.Writer {
-	rtsplog.Debug().Println("TEST CLIENT:", "AudioWrite")
+	rtsplog.Debug.Println("TEST CLIENT:", "AudioWrite")
 	panic("I'm sorry Dave, I can't allow you to do that.")
 }
 
 func (tc *testClient) AudioWriterErr(err error) {
-	rtsplog.Debug().Println("TEST CLIENT:", "AudioWriterErr", err)
+	rtsplog.Debug.Println("TEST CLIENT:", "AudioWriterErr", err)
 }
 
 func makeTestClient() Service {

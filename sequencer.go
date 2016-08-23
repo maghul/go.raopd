@@ -1,12 +1,13 @@
 package raopd
 
 import (
+	"emh/logger"
 	"fmt"
 	"os"
 	"time"
 )
 
-var seqlog = GetLogger("raopd.sequencer")
+var seqlog = logger.GetLogger("raopd.sequencer")
 
 const sequencerDebug = false
 
@@ -85,11 +86,11 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 							state = "OK"
 						}
 					}
-					seqlog.Debug().Println("gap ", ii, ", state=", state)
+					seqlog.Debug.Println("gap ", ii, ", state=", state)
 				}
 				if ok {
 					if gap {
-						seqlog.Debug().Println("TX: REREQUEST", start, ", ", count)
+						seqlog.Debug.Println("TX: REREQUEST", start, ", ", count)
 						if sequencerDebug {
 							fmt.Println("TX: REREQUEST", start, ", ", count)
 						}
@@ -111,18 +112,28 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 		}
 
 		flush := func() {
-			seqlog.Debug().Println("SEQUENCER: Flushing Sequencer")
+			seqlog.Debug.Println("SEQUENCER: Flushing Sequencer")
+			// Empty everything we have stored
 			for _, pkt := range pkts {
 				if pkt != nil {
 					pkt.Reclaim()
 				}
 			}
 			pkts = make(map[uint16]*rtpPacket)
-			initial = true
-			if c == 1 {
-				return
+
+			// Empty the input channels
+		flushloop:
+			for {
+				select {
+				case pkt := <-data:
+					pkt.Reclaim()
+				default:
+					break flushloop
+				}
 			}
-			seqlog.Debug().Println("SEQUENCER: Flushed Sequencer")
+
+			initial = true
+			seqlog.Debug.Println("SEQUENCER: Flushed Sequencer")
 		}
 
 		defer func() {
@@ -153,7 +164,7 @@ func startSequencer(data chan *rtpPacket, outf func(pkt *rtpPacket), request cha
 
 			if initial {
 				if sequencerDebug {
-					seqlog.Debug().Println("SEQUENCER: Waiting for data to start")
+					seqlog.Debug.Println("SEQUENCER: Waiting for data to start")
 				}
 			}
 			select {

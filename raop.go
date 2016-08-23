@@ -2,6 +2,7 @@ package raopd
 
 import (
 	"bufio"
+	"emh/logger"
 	"fmt"
 	"io"
 	"net"
@@ -35,7 +36,7 @@ type raop struct {
 	sequencer sequencer
 }
 
-var raoplog = GetLogger("raopd.raop")
+var raoplog = logger.GetLogger("raopd.raop")
 
 func (r *raop) String() string {
 	return fmt.Sprint("RAOP: hw=", r.hwaddr)
@@ -50,8 +51,8 @@ func (r *raop) startRtspProcess() (err error) {
 		return
 	}
 
-	raoplog.Debug().Println("Starting RTSP server at ", r.l.Addr())
-	s := makeRtspServer(r.rf.i, r)
+	raoplog.Debug.Println("Starting RTSP server at ", r.l.Addr())
+	s := makeRtspServer(r.acs.i, r)
 	r.rtsp = s
 	go s.Serve(r.l)
 
@@ -80,12 +81,12 @@ type rtspHandler struct {
 }
 
 func (r *rtspHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	raoplog.Debug().Println("RTSP REQUEST: ", req)
+	raoplog.Debug.Println("RTSP REQUEST: ", req)
 	rw.WriteHeader(http.StatusOK)
 }
 
 func (r *raop) startRtp(controlAddr, timingAddr *net.UDPAddr) (err error) {
-	raoplog.Debug().Println("startRtp...")
+	raoplog.Debug.Println("startRtp...")
 	if r.seqchan == nil {
 		r.seqchan = make(chan *rtpPacket, 256)
 		r.rrchan = make(chan rerequest, 128)
@@ -102,7 +103,7 @@ func (r *raop) startRtp(controlAddr, timingAddr *net.UDPAddr) (err error) {
 	}
 	if err != nil {
 		r.sequencer.stop()
-		raoplog.Debug().Println("Failed to start RTP:", err)
+		raoplog.Debug.Println("Failed to start RTP:", err)
 	}
 	return
 }
@@ -131,7 +132,7 @@ func (r *raop) close() {
 }
 
 func (r *raop) getParameter(name string) string {
-	raoplog.Debug().Println("------------------ getParameter: <", name, ">")
+	raoplog.Debug.Println("------------------ getParameter: <", name, ">")
 	switch name {
 	case "volume":
 		return fmt.Sprintf("%f", r.vol.DeviceVolume())

@@ -2,6 +2,7 @@ package raopd
 
 import (
 	"bytes"
+	"emh/logger"
 	"errors"
 	"fmt"
 	"net"
@@ -13,7 +14,7 @@ import (
 	"github.com/guelfey/go.dbus"
 )
 
-var zconflog = GetLogger("raopd.zeroconf")
+var zconflog = logger.GetLogger("raopd.zeroconf")
 
 type bonjourRecord struct {
 	serviceName   string
@@ -37,7 +38,7 @@ func getMyFQDN() string {
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		zconflog.Info().Println(err)
+		zconflog.Info.Println(err)
 		panic(err)
 	}
 	fqdn := out.String()
@@ -45,7 +46,7 @@ func getMyFQDN() string {
 	if strings.Index(fqdn, ".") < 0 {
 		fqdn = fqdn + ".local"
 	}
-	zconflog.Debug().Println("FQDN: ", fqdn)
+	zconflog.Debug.Println("FQDN: ", fqdn)
 	return fqdn
 }
 
@@ -100,7 +101,7 @@ func makeAPBonjourRecord(raop *raop) *bonjourRecord {
 }
 
 func (r *bonjourRecord) Unpublish() {
-	zconflog.Debug().Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
+	zconflog.Debug.Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
 	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Free", 0)
 	r.obj = nil
 }
@@ -111,12 +112,14 @@ func (r *bonjourRecord) Publish() error {
 	var path dbus.ObjectPath
 	var err error
 
+	zconflog.Debug.Println("Publish: r=", r)
+
 	if r.obj != nil {
 		return errors.New(fmt.Sprintf("Service '%s' is alread published", r.serviceName))
 	}
 	dconn, err = dbus.SystemBus()
 	if err != nil {
-		zconflog.Debug("dbus.SystemBus error ", err)
+		zconflog.Debug.Println("dbus.SystemBus error ", err)
 		return err
 	}
 
@@ -140,7 +143,7 @@ func (r *bonjourRecord) Publish() error {
 		return c.Err
 	}
 	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
-	zconflog.Debug("Publishing! ", r.serviceName, " as service on port=", r.Port)
+	zconflog.Debug.Println("Publishing! ", r.serviceName, " as service on port=", r.Port)
 
 	return nil
 }
@@ -231,7 +234,7 @@ func runResolver(requestChan chan reqFunc) {
 	for {
 		select {
 		case s := <-sigchan:
-			zconflog.Debug().Println("Received signal: ", s)
+			zconflog.Debug.Println("Received signal: ", s)
 			switch s.Name {
 			case "org.freedesktop.Avahi.ServiceResolver.Found":
 				key := zeroconfResolveKey{s.Body[2].(string), s.Body[3].(string)}
@@ -265,9 +268,9 @@ func getRequestChan() chan reqFunc {
 func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
 	result := make(chan *zeroconfResolveReply, 4)
 	req := &zeroconfResolveRequest{zeroconfResolveKey{srvName, srvType}, result, nil}
-	zconflog.Debug().Println("resolveService: name=", srvName, ", type=", srvType)
+	zconflog.Debug.Println("resolveService: name=", srvName, ", type=", srvType)
 	getRequestChan() <- func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest) {
-		zconflog.Debug().Println("New Resolve Request: ", req)
+		zconflog.Debug.Println("New Resolve Request: ", req)
 		_, exists := requests[req.zeroconfResolveKey]
 		if exists {
 			zconflog.Info.Println("The request ", req.zeroconfResolveKey, " is already being resolved")
@@ -281,7 +284,7 @@ func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
 
 func (req *zeroconfResolveRequest) close() {
 	getRequestChan() <- func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest) {
-		zconflog.Debug().Println("Delete Resolve Request: ", req)
+		zconflog.Debug.Println("Delete Resolve Request: ", req)
 		_, exists := requests[req.zeroconfResolveKey]
 		if exists {
 			delete(requests, req.zeroconfResolveKey)
