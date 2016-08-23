@@ -93,3 +93,11 @@ func (svc *ServiceRef) Volume(vol string) {
 	}
 	svc.raop.vol.SetDeviceVolume(float32(ivol))
 }
+
+// Set a writer for the audio stream. Only raw PCM with two channel
+// 16-bit depth at 44100 samples/second is currently supported.
+// The stream is sent as w and s is a channel to indicate that
+// the stream has been closed by the receiver or source.
+func (svc *ServiceRef) NewStream(w io.Writer, s chan bool) {
+	svc.raop.newStream(w, s)
+}

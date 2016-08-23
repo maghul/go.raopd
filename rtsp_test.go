@@ -77,6 +77,7 @@ func makeTestRtspSession() *rtspSession {
 	r.dacp.mrc = make(chan func() error, 10)
 	r.dacp.crc = make(chan func() error, 12)
 
+	r.initAlac("x", "96 352 0 16 40 10 14 2 255 0 0 44100")
 	r.plc = makeTestClient()
 
 	r.vol = &volumeHandler{}

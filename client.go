@@ -1,7 +1,6 @@
 package raopd
 
 import (
-	"io"
 	"net"
 )
 
@@ -43,8 +42,8 @@ type Service interface {
 
 	// Get a writer for the audio stream. Only raw PCM with two channel
 	// 16-bit depth at 44100 samples/second is currently supported.
-	AudioWriter() io.Writer
-	AudioWriterErr(error)
+	//	AudioWriter() io.Writer
+	//	AudioWriterErr(error)
 
 	// SetCoverArt will set the cover art of the currently playing track.
 	// May be ignored and can be disables by setting SupportsCoverArt to

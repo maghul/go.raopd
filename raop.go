@@ -2,9 +2,6 @@ package raopd
 
 import (
 	"bufio"
-	"crypto/aes"
-	"crypto/cipher"
-	"emh/audio/alac"
 	"fmt"
 	"io"
 	"net"
@@ -16,11 +13,10 @@ type raop struct {
 	rf *ServiceRegistry
 	l  net.Listener
 
-	plc         Service
-	hwaddr      net.HardwareAddr
-	audioBuffer []byte
-	alac        *alac.AlacDecoder
-	alacConf    *alac.AlacConf
+	plc Service
+	audioStreams
+
+	hwaddr net.HardwareAddr
 
 	vol *volumeHandler
 	// TODO: This should be considered session data. There is a 1-1 relationship
@@ -37,9 +33,6 @@ type raop struct {
 	seqchan   chan *rtpPacket
 	rrchan    chan rerequest
 	sequencer sequencer
-	aeskey    cipher.Block
-	aesiv     []byte
-	mode      cipher.BlockMode
 }
 
 func (r *raop) String() string {
@@ -89,18 +82,27 @@ func (r *rtspHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-func (r *raop) startRtp(controlAddr, timingAddr *net.UDPAddr) {
+func (r *raop) startRtp(controlAddr, timingAddr *net.UDPAddr) (err error) {
 	fmt.Println("startRtp...")
-	if (r.seqchan==nil) {
+	if r.seqchan == nil {
 		r.seqchan = make(chan *rtpPacket, 256)
 		r.rrchan = make(chan rerequest, 128)
 		r.sequencer = startSequencer(r.seqchan, r.handleAudioPacket, r.rrchan)
 	}
 	if r.control == nil {
-		r.control = startRtp(r.getControlHandler, controlAddr)
-		r.data = startRtp(r.getDataHandler, nil)
-		r.timing = startRtp(r.getTimingHandler, timingAddr)
+		r.control, err = startRtp(r.getControlHandler, controlAddr)
+		if err == nil {
+			r.data, err = startRtp(r.getDataHandler, nil)
+			if err == nil {
+				r.timing, err = startRtp(r.getTimingHandler, timingAddr)
+			}
+		}
 	}
+	if err != nil {
+		r.sequencer.stop()
+		fmt.Println("Failed to start RTP:", err)
+	}
+	return
 }
 
 func (r *raop) setRemote(remote string) error {
@@ -109,15 +111,9 @@ func (r *raop) setRemote(remote string) error {
 	return err
 }
 
-func (r *raop) initAlac(rtpmap, fmtpstr string) {
-	r.alacConf = alac.NewAlacConfFromFmtp(fmtpstr)
-	r.alac = alac.NewAlacDecoder(r.alacConf)
-}
-
 func (r *raop) teardown() {
-	fmt.Println("What do I need to teardown actually?")
 	r.plc.Close()
-	r.sequencer.flush()
+	r.sequencer.stop()
 	r.data.Close()
 	r.control.Close()
 	r.timing.Close()
@@ -162,43 +158,9 @@ func (r *raop) getParameters(req io.Reader, resp io.Writer) {
 
 }
 
-func (r *raop) rtptoms(rtp int64) int {
-	ac := r.alacConf
-	return int((rtp * 1000) / int64(ac.SampleRate()))
-}
-
 func (r *raop) setProgress(start, current, end int64) {
 	position := r.rtptoms(current - start)
 	duration := r.rtptoms(end - start)
 
 	r.plc.SetProgress(position, duration)
-}
-
-func (r *raop) handleAudioPacket(pkt *rtpPacket) {
-	if pkt.seqno%100 == 0 {
-		fmt.Println("Received audio packet ", pkt.seqno)
-	}
-	//	if (r.mode==nil) {
-	r.mode = cipher.NewCBCDecrypter(r.aeskey, r.aesiv)
-	//	}
-
-	ciphertext := pkt.content[12:]
-	l := len(ciphertext) / 16
-	l *= 16
-	ciphertext = ciphertext[:l]
-	if len(ciphertext)%aes.BlockSize != 0 {
-		panic("ciphertext is not a multiple of the block size")
-	}
-	r.mode.CryptBlocks(ciphertext, ciphertext)
-
-	n := r.alac.Decode(pkt.content[12:], r.audioBuffer)
-	pkt.Reclaim()
-
-	of := r.plc.AudioWriter()
-	if of != nil {
-		_, err := of.Write(r.audioBuffer[0:n])
-		if err != nil {
-			r.plc.AudioWriterErr(err)
-		}
-	}
 }
