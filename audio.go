@@ -3,14 +3,17 @@ package raopd
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"emh/audio/alac"
 	"emh/logger"
-
+	"errors"
 	"io"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/maghul/go.alac"
 )
+
+var alacNotInitialized = errors.New("Alac has not been initialized")
 
 type audioStream struct {
 	audioWriter   io.Writer
@@ -23,8 +26,7 @@ type audioStreams struct {
 	mode        cipher.BlockMode
 	aeskey      cipher.Block
 	aesiv       []byte
-	alac        *alac.AlacDecoder
-	alacConf    *alac.AlacConf
+	alac        *alac.Alac
 
 	streamsMutex sync.Mutex
 	streams      []*audioStream
@@ -32,9 +34,10 @@ type audioStreams struct {
 
 var audiolog = logger.GetLogger("raopd.audio")
 
-func (r *audioStreams) initAlac(rtpmap, fmtpstr string) {
-	r.alacConf = alac.NewAlacConfFromFmtp(fmtpstr)
-	r.alac = alac.NewAlacDecoder(r.alacConf)
+func (r *audioStreams) initAlac(rtpmap, fmtpstr string) error {
+	var err error
+	r.alac, err = alac.NewFromFmtp(fmtpstr)
+	return err
 }
 
 func (r *audioStreams) newStream(w io.Writer, s chan bool) {
@@ -64,10 +67,10 @@ func (r *audioStreams) handleAudioPacket(pkt *rtpPacket) {
 	}
 	r.mode.CryptBlocks(ciphertext, ciphertext)
 
-	n := r.alac.Decode(pkt.content[12:], r.audioBuffer)
+	r.audioBuffer = r.alac.Decode(pkt.content[12:])
 	pkt.Reclaim()
 
-	r.writeToStreams(r.audioBuffer[0:n])
+	r.writeToStreams(r.audioBuffer)
 }
 
 const audioTimeout = time.Millisecond
@@ -88,10 +91,10 @@ func (r *audioStreams) writeToStreams(b []byte) {
 	}
 }
 
-func (a *audioStreams) rtptoms(rtp int64) int {
+func (a *audioStreams) rtptoms(rtp int64) (int, error) {
 	if a.alac == nil {
-		panic("Alac has not been initialized")
+		return 0, alacNotInitialized
 	}
 	sampleRate := a.alac.SampleRate()
-	return int((rtp * 1000) / int64(sampleRate))
+	return int((rtp * 1000) / int64(sampleRate)), nil
 }

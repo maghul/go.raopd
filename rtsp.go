@@ -274,8 +274,10 @@ func (rs *rtspSession) handle(rw http.ResponseWriter, req *http.Request) {
 			case scanf(s, "volume: %f", &vol):
 				rs.raop.vol.SetServiceVolume(vol)
 			case scanf(s, "progress: %d/%d/%d", &start, &current, &end):
-				//				rtsplog.Debug.Println("progress:", start, current, end)
-				rs.raop.setProgress(start, current, end)
+				err := rs.raop.setProgress(start, current, end)
+				if err != nil {
+					rtsplog.Debug.Println("Could not set progress:", start, current, end, ", error=", err)
+				}
 			}
 		case "image/jpeg", "image/png":
 			rtsplog.Debug.Println("SET_PARAMETER: image: ")

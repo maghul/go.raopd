@@ -171,9 +171,16 @@ func (r *raop) getParameters(req io.Reader, resp io.Writer) {
 
 }
 
-func (r *raop) setProgress(start, current, end int64) {
-	position := r.rtptoms(current - start)
-	duration := r.rtptoms(end - start)
+func (r *raop) setProgress(start, current, end int64) error {
+	position, err := r.rtptoms(current - start)
+	if err != nil {
+		return err
+	}
+	duration, err := r.rtptoms(end - start)
+	if err != nil {
+		return err
+	}
 
 	r.sink.SetProgress(position, duration)
+	return nil
 }
