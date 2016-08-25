@@ -2,7 +2,6 @@ package raopd
 
 import (
 	"bytes"
-	"emh/audio/alac"
 	"fmt"
 	"io"
 	"io/ioutil"
