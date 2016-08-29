@@ -52,6 +52,8 @@ func (sc *SinkCollection) Close() {
 		source.br.Unpublish()
 		sink.Closed()
 	}
+
+	zeroconfCleanUp() // TODO: will cleanup too much
 }
 
 /*

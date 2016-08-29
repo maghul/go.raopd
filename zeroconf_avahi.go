@@ -1,114 +1,30 @@
+// +build linux
+
 package raopd
 
 import (
-	"bytes"
-	"emh/logger"
 	"errors"
 	"fmt"
-	"net"
 	"os"
-	"os/exec"
-	"strconv"
-	"strings"
 
 	"github.com/guelfey/go.dbus"
 )
-
-var zconflog = logger.GetLogger("raopd.zeroconf")
-
-type bonjourRecord struct {
-	serviceName   string
-	serviceType   string
-	serviceDomain string
-	serviceHost   string
-	Port          uint16
-	text          [][]byte
-
-	obj *dbus.Object
-}
 
 func init() {
 	requestChan = make(chan reqFunc, 5)
 	go runResolver(requestChan)
 }
 
-func (b *bonjourRecord) String() string {
-	return fmt.Sprintf("BonjourRecord{%s,%s,%s,%s:%d}",
-		b.serviceName, b.serviceType, b.serviceDomain, b.serviceHost, b.Port)
-
+func zeroconfCleanUp() {
 }
 
-func getMyFQDN() string {
-	cmd := exec.Command("/bin/hostname", "-f")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	err := cmd.Run()
-	if err != nil {
-		zconflog.Info.Println(err)
-		panic(err)
-	}
-	fqdn := out.String()
-	fqdn = fqdn[:len(fqdn)-1] // removing EOL
-	if strings.Index(fqdn, ".") < 0 {
-		fqdn = fqdn + ".local"
-	}
-	zconflog.Debug.Println("FQDN: ", fqdn)
-	return fqdn
-}
-
-func (br *bonjourRecord) appendText(v ...string) {
-	vl := len(v)
-	for ii := 0; ii < vl; ii++ {
-		br.text = append(br.text, bytes.NewBufferString(v[ii]).Bytes())
-	}
-}
-
-func hardwareAddressToServicePrefix(hwaddr net.HardwareAddr) string {
-	s := hwaddr.String()
-	s = strings.Replace(s, ":", "", -1)
-	s = strings.ToUpper(s)
-	return s
-
-}
-
-func makeAPBonjourRecord(raop *raop) *bonjourRecord {
-	r := &bonjourRecord{}
-
-	fqdn := getMyFQDN()
-	hwaddr := hardwareAddressToServicePrefix(raop.hwaddr)
-	port := raop.port()
-
-	r.serviceName = fmt.Sprintf("%s@%s", hwaddr, raop.sink.Info().Name)
-	r.serviceType = "_raop._tcp"
-	r.serviceDomain = "local" // sdomain
-	r.serviceHost = fqdn      // shost
-	r.Port = port
-
-	version := "0.1" // Get from RAOP or caller.
-	r.appendText(
-		"txtvers=1",
-		"ch=2",     // 2 channels
-		"cn=0,1",   // PCM,ALAC
-		"et=0,1",   // Encryption, none,RSA
-		"sv=false", //
-		"da=true",  //
-		"am=Pairlay",
-		"sr=44100",    // Sample Rate
-		"ss=16",       // Sample Size
-		"pw=false",    // No password
-		"vn=3",        //
-		"tp=UDP",      // Transports: UDP
-		"md=0,1,2",    // Metadata: text, artwork, progress
-		"vs="+version, // Version
-		"sm=false",    //
-		"ek=1")        //
-
-	return r
+func (r *bonjourRecord) dbusObject() *dbus.Object {
+	return (r.obj).(*dbus.Object)
 }
 
 func (r *bonjourRecord) Unpublish() {
 	zconflog.Debug.Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
-	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Free", 0)
+	r.dbusObject().Call("org.freedesktop.Avahi.EntryGroup.Free", 0)
 	r.obj = nil
 }
 
@@ -135,7 +51,7 @@ func (r *bonjourRecord) Publish() error {
 	r.obj = dconn.Object("org.freedesktop.Avahi", path)
 
 	// http://www.dns-sd.org/ServiceTypes.html
-	c := r.obj.Call("org.freedesktop.Avahi.EntryGroup.AddService", 0,
+	c := r.dbusObject().Call("org.freedesktop.Avahi.EntryGroup.AddService", 0,
 		int32(-1),       // avahi.IF_UNSPEC
 		int32(-1),       // avahi.PROTO_UNSPEC
 		uint32(0),       // flags
@@ -151,7 +67,7 @@ func (r *bonjourRecord) Publish() error {
 	}
 
 	zconflog.Debug.Println("Publishing! ", r.serviceName, " as service on port=", r.Port)
-	c = r.obj.Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
+	c = r.dbusObject().Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
 	if c.Err != nil {
 		zconflog.Info.Println("org.freedesktop.Avahi.EntryGroup.Commit ", r.serviceName, ", err=", c.Err)
 		return c.Err
@@ -162,24 +78,6 @@ func (r *bonjourRecord) Publish() error {
 
 // -------------------------- resolve ---------------------------------------------------------------
 
-type zeroconfResolveKey struct {
-	srvName string
-	srvType string
-}
-
-type zeroconfResolveRequest struct {
-	zeroconfResolveKey
-	result     chan *zeroconfResolveReply
-	resolveObj *dbus.Object
-}
-
-type zeroconfResolveReply struct {
-	name string
-	addr *net.TCPAddr
-	txt  []string
-}
-
-//var requestChan chan *zeroconfResolveRequest
 type reqFunc func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest)
 
 var requestChan chan reqFunc
@@ -207,27 +105,8 @@ func newResolver(dconn *dbus.Conn, avahi *dbus.Object, req *zeroconfResolveReque
 	return nil
 }
 
-func toStringArray(d [][]byte) []string {
-	r := make([]string, len(d))
-	for ii := 0; ii < len(d); ii++ {
-		r[ii] = string(d[ii])
-	}
-	return r
-}
-
-func toTCPAddr(addr, port string) (*net.TCPAddr, error) {
-	ip := net.ParseIP(addr)
-	p, err := strconv.ParseInt(port, 10, 0)
-	if err != nil {
-		return nil, err
-	}
-	a := &net.TCPAddr{IP: ip, Port: int(p), Zone: ""}
-	return a, nil
-}
-
-func toString(i interface{}) string {
-	s := fmt.Sprintf("%v", i)
-	return s
+func (req *zeroconfResolveRequest) dbusObject() *dbus.Object {
+	return (req.resolveObj).(*dbus.Object)
 }
 
 func runResolver(requestChan chan reqFunc) {
@@ -302,7 +181,7 @@ func (req *zeroconfResolveRequest) close() {
 		_, exists := requests[req.zeroconfResolveKey]
 		if exists {
 			delete(requests, req.zeroconfResolveKey)
-			c := req.resolveObj.Call("org.freedesktop.Avahi.ServiceResolver.Free", 0)
+			c := req.dbusObject().Call("org.freedesktop.Avahi.ServiceResolver.Free", 0)
 			err := c.Err
 			if err != nil {
 				zconflog.Info.Println(os.Stderr, "Error closing ResolveRequest: ", err)

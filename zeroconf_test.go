@@ -1,9 +1,15 @@
 package raopd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestFQDN(t *testing.T) {
+	fqdn := getMyFQDN()
+	assert.Equal(t, "durer.local", fqdn)
+}
 
 func TestZeroconfBrowse(t *testing.T) {
 	br := &bonjourRecord{}
