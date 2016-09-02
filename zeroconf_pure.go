@@ -37,6 +37,8 @@ func (r *bonjourRecord) Unpublish() {
 func (r *bonjourRecord) Publish() error {
 
 	zconflog.Debug.Println("Publish: r=", r)
+	// TODO: This will send the hostname without the .local suffix which AirPlay
+	//       devices doesn't seem to like.
 	var err error
 	r.obj, err = bonjour.Register(r.serviceName, r.serviceType, r.serviceDomain, int(r.Port), toStringArray(r.text), nil)
 	if err == nil {
