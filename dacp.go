@@ -117,18 +117,37 @@ func (d *dacp) runDacp() {
 	for {
 
 		switch {
-		case d.req == nil:
+		case d.addr != nil && d.req == nil:
+			// This means we have an address but no zeroconf request running.
+			// Currently this should not be possible.
 			select {
 			case dr := <-d.mrc:
 				err = dr()
 			case dr := <-d.crc:
 				err = dr()
 			}
-		case d.req != nil:
+		case d.addr != nil && d.req != nil:
+			// This means we have an address so we can happily process our requests
+			// if do get an update from zeroconf we just log it and change the address
+			// for future requests.
 			select {
 			case dr := <-d.mrc:
 				err = dr()
 			case dr := <-d.crc:
+				err = dr()
+			case rr := <-d.req.result:
+				dacplog.Debug.Println("DACP UNSOLICITED RR=", rr)
+				if d.addr != rr.addr {
+					dacplog.Info.Println("DACP UNSOLICITED Address mismatch, current address=", d.addr, ", RR address=", rr.addr)
+					d.addr = rr.addr
+				}
+			}
+		case d.req != nil:
+			// This means we have no address and can't send any requests, but there
+			// is a zeroconf resolve request pending se we will just wait for the
+			// response.
+			select {
+			case dr := <-d.mrc:
 				err = dr()
 			case rr := <-d.req.result:
 				dacplog.Debug.Println("DACP RR=", rr)
@@ -136,6 +155,8 @@ func (d *dacp) runDacp() {
 				d.sink.Connected(rr.name)
 			}
 		default:
+			// This means we have no address and no request for DACP. Just wait
+			// for a request to connect.
 			dr := <-d.mrc
 			err = dr()
 
