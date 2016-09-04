@@ -7,6 +7,7 @@ package raopd
 // on the host.
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/oleksandr/bonjour"
@@ -37,10 +38,23 @@ func (r *bonjourRecord) Unpublish() {
 func (r *bonjourRecord) Publish() error {
 
 	zconflog.Debug.Println("Publish: r=", r)
-	// TODO: This will send the hostname without the .local suffix which AirPlay
-	//       devices doesn't seem to like.
 	var err error
-	r.obj, err = bonjour.Register(r.serviceName, r.serviceType, r.serviceDomain, int(r.Port), toStringArray(r.text), nil)
+	zconflog.Info.Println("zeroconf_pure: Publish r=", r)
+
+	addrs, err := net.LookupIP(r.serviceHost)
+	if err != nil {
+		// Try appending the host domain suffix and lookup again
+		// (required for Linux-based hosts)
+		tmpHostName := fmt.Sprintf("%s%s.", r.serviceHost, r.serviceDomain)
+		addrs, err = net.LookupIP(tmpHostName)
+		if err != nil {
+			return fmt.Errorf("Could not determine host IP addresses for %s", r.serviceHost)
+		}
+	}
+
+	host := fmt.Sprintf("%s.", r.serviceHost)
+	ip := fmt.Sprintf("%v", addrs[0])
+	r.obj, err = bonjour.RegisterProxy(r.serviceName, r.serviceType, r.serviceDomain, int(r.Port), host, ip, toStringArray(r.text), nil)
 	if err == nil {
 		registeredServers[r.serviceName] = r
 	}
