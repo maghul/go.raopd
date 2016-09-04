@@ -41,13 +41,13 @@ func (d *dacp) open(id string, ar string) {
 			d.ar = ar
 
 			if d.req != nil {
-				d.req.close()
+				zeroconf.close(d.req)
 				// close connection as well.
 			}
 
 			var err error
 			name := fmt.Sprintf("iTunes_Ctrl_%s", id)
-			d.req, err = resolveService(name, "_dacp._tcp")
+			d.req, err = zeroconf.resolveService(name, "_dacp._tcp")
 			if err != nil {
 				return err
 			}
@@ -62,7 +62,7 @@ func (d *dacp) close() {
 		d.id = ""
 		d.ar = ""
 		d.addr = nil
-		d.req.close()
+		zeroconf.close(d.req)
 		d.req = nil
 		return nil
 	}

@@ -13,11 +13,14 @@ import (
 	"github.com/oleksandr/bonjour"
 )
 
-func init() {
-
+type zeroconfPureImplementation struct {
 }
 
-func zeroconfCleanUp() {
+func init() {
+	//	zeroconf = &bonjourPureImplementation{}
+}
+
+func (bi *zeroconfPureImplementation) zeroconfCleanUp() {
 	rs := registeredServers
 	registeredServers = nil
 
@@ -28,14 +31,14 @@ func zeroconfCleanUp() {
 	}
 }
 
-func (r *bonjourRecord) Unpublish() {
+func (bi *zeroconfPureImplementation) Unpublish(r *zeroconfRecord) {
 	zconflog.Debug.Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
 	delete(registeredServers, r.serviceName)
 	s := r.obj.(*bonjour.Server)
 	s.Shutdown()
 }
 
-func (r *bonjourRecord) Publish() error {
+func (bi *zeroconfPureImplementation) Publish(r *zeroconfRecord) error {
 
 	zconflog.Debug.Println("Publish: r=", r)
 	var err error
@@ -63,7 +66,7 @@ func (r *bonjourRecord) Publish() error {
 
 // -------------------------- resolve ---------------------------------------------------------------
 
-func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
+func (bi *zeroconfPureImplementation) resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
 	zconflog.Debug.Println("resolveService: name=", srvName, ", type=", srvType)
 	result := make(chan *zeroconfResolveReply, 4)
 	req := &zeroconfResolveRequest{zeroconfResolveKey{srvName, srvType}, result, nil}
@@ -93,7 +96,7 @@ func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
 
 }
 
-func (req *zeroconfResolveRequest) close() {
+func (bi *zeroconfPureImplementation) close(req *zeroconfResolveRequest) {
 	resolver := req.resolveObj.(*bonjour.Resolver)
 	resolver.Exit <- true
 }

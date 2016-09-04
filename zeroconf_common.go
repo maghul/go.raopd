@@ -11,8 +11,9 @@ import (
 )
 
 var zconflog = logger.GetLogger("raopd.zeroconf")
+var zeroconf zeroconfImplementation
 
-type bonjourRecord struct {
+type zeroconfRecord struct {
 	serviceName   string
 	serviceType   string
 	serviceDomain string
@@ -24,7 +25,15 @@ type bonjourRecord struct {
 	obj interface{} // Implementation specific object reference
 }
 
-var registeredServers = make(map[string]*bonjourRecord)
+type zeroconfImplementation interface {
+	Publish(r *zeroconfRecord) error
+	Unpublish(r *zeroconfRecord)
+	resolveService(srvName, srvType string) (*zeroconfResolveRequest, error)
+	close(*zeroconfResolveRequest)
+	zeroconfCleanUp()
+}
+
+var registeredServers = make(map[string]*zeroconfRecord)
 
 // Get Fully Qualified Bonjour Domain Name
 func getMyFQDN() string {
@@ -50,13 +59,13 @@ func toString(i interface{}) string {
 	return s
 }
 
-func (b *bonjourRecord) String() string {
+func (b *zeroconfRecord) String() string {
 	return fmt.Sprintf("BonjourRecord{%s,%s,%s,%s:%d}",
 		b.serviceName, b.serviceType, b.serviceDomain, b.serviceHost, b.Port)
 
 }
 
-func (br *bonjourRecord) appendText(v ...string) {
+func (br *zeroconfRecord) appendText(v ...string) {
 	vl := len(v)
 	for ii := 0; ii < vl; ii++ {
 		br.text = append(br.text, bytes.NewBufferString(v[ii]).Bytes())
@@ -71,17 +80,20 @@ func hardwareAddressToServicePrefix(hwaddr net.HardwareAddr) string {
 
 }
 
-func makeAPBonjourRecord(raop *raop) *bonjourRecord {
-	r := &bonjourRecord{}
+func makeAPBonjourRecord(raop *raop) *zeroconfRecord {
+	r := &zeroconfRecord{}
 
-	fqdn := getMyFQDN()
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = ""
+	}
 	hwaddr := hardwareAddressToServicePrefix(raop.hwaddr)
 	port := raop.port()
 
 	r.serviceName = fmt.Sprintf("%s@%s", hwaddr, raop.sink.Info().Name)
 	r.serviceType = "_raop._tcp"
 	r.serviceDomain = "local" // sdomain
-	r.serviceHost = fqdn      // shost
+	r.serviceHost = hostname  // shost
 	r.Port = port
 
 	version := "0.1" // Get from RAOP or caller.

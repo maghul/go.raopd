@@ -24,7 +24,7 @@ type raop struct {
 	//       between an Raop instance and a session instance but cover different
 	//       functionality
 	clientUserAgent string
-	br              *bonjourRecord
+	br              *zeroconfRecord
 
 	dacp                  *dacp
 	rtsp                  *rtspServer

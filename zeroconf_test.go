@@ -12,7 +12,7 @@ func TestFQDN(t *testing.T) {
 }
 
 func TestZeroconfBrowse(t *testing.T) {
-	br := &bonjourRecord{}
+	br := &zeroconfRecord{}
 	br.serviceName = "0009B0A72096@PlingPlong"
 	br.serviceType = "_knytte._tcp"
 	br.serviceDomain = "local" // sdomain

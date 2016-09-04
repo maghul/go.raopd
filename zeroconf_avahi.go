@@ -1,4 +1,4 @@
-// +build linux
+// +build ignore
 
 package raopd
 
@@ -10,25 +10,30 @@ import (
 	"github.com/guelfey/go.dbus"
 )
 
+type zeroconfAvahiImplementation struct {
+}
+
 func init() {
+	zeroconf = &zeroconfAvahiImplementation{}
+
 	requestChan = make(chan reqFunc, 5)
 	go runResolver(requestChan)
 }
 
-func zeroconfCleanUp() {
+func (bi *zeroconfAvahiImplementation) zeroconfCleanUp() {
 }
 
-func (r *bonjourRecord) dbusObject() *dbus.Object {
+func (r *zeroconfRecord) dbusObject() *dbus.Object {
 	return (r.obj).(*dbus.Object)
 }
 
-func (r *bonjourRecord) Unpublish() {
+func (bi *zeroconfAvahiImplementation) Unpublish(r *zeroconfRecord) {
 	zconflog.Debug.Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
 	r.dbusObject().Call("org.freedesktop.Avahi.EntryGroup.Free", 0)
 	r.obj = nil
 }
 
-func (r *bonjourRecord) Publish() error {
+func (bi *zeroconfAvahiImplementation) Publish(r *zeroconfRecord) error {
 	var dconn *dbus.Conn
 	var obj *dbus.Object
 	var path dbus.ObjectPath
@@ -52,15 +57,15 @@ func (r *bonjourRecord) Publish() error {
 
 	// http://www.dns-sd.org/ServiceTypes.html
 	c := r.dbusObject().Call("org.freedesktop.Avahi.EntryGroup.AddService", 0,
-		int32(-1),       // avahi.IF_UNSPEC
-		int32(-1),       // avahi.PROTO_UNSPEC
-		uint32(0),       // flags
-		r.serviceName,   // sname
-		r.serviceType,   // stype
-		r.serviceDomain, // sdomain
-		r.serviceHost,   // shost
-		r.Port,          // port
-		r.text)          // text record
+		int32(-1),                                            // avahi.IF_UNSPEC
+		int32(-1),                                            // avahi.PROTO_UNSPEC
+		uint32(0),                                            // flags
+		r.serviceName,                                        // sname
+		r.serviceType,                                        // stype
+		r.serviceDomain,                                      // sdomain
+		fmt.Sprintf("%s.%s", r.serviceHost, r.serviceDomain), // shost
+		r.Port, // port
+		r.text) // text record
 	if c.Err != nil {
 		zconflog.Debug.Println("org.freedesktop.Avahi.EntryGroup.AddService error ", c.Err.Error())
 		return c.Err
@@ -158,7 +163,7 @@ func getRequestChan() chan reqFunc {
 	return requestChan
 }
 
-func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
+func (bi *zeroconfAvahiImplementation) resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
 	result := make(chan *zeroconfResolveReply, 4)
 	req := &zeroconfResolveRequest{zeroconfResolveKey{srvName, srvType}, result, nil}
 	zconflog.Debug.Println("resolveService: name=", srvName, ", type=", srvType)
@@ -175,7 +180,7 @@ func resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
 	return req, nil
 }
 
-func (req *zeroconfResolveRequest) close() {
+func (bi *zeroconfAvahiImplementation) close(req *zeroconfResolveRequest) {
 	getRequestChan() <- func(dconn *dbus.Conn, avahi *dbus.Object, requests map[zeroconfResolveKey]*zeroconfResolveRequest) {
 		zconflog.Debug.Println("Delete Resolve Request: ", req)
 		_, exists := requests[req.zeroconfResolveKey]
