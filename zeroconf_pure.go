@@ -1,5 +1,3 @@
-// +build windows darwin
-
 package raopd
 
 // This uses a Pure Go implementation of Bonjour. It will always
@@ -17,7 +15,10 @@ type zeroconfPureImplementation struct {
 }
 
 func init() {
-	//	zeroconf = &bonjourPureImplementation{}
+	registerZeroconfProvider(1000, "Pure Go",
+		func() zeroconfImplementation {
+			return &zeroconfPureImplementation{}
+		})
 }
 
 func (bi *zeroconfPureImplementation) zeroconfCleanUp() {
@@ -82,11 +83,11 @@ func (bi *zeroconfPureImplementation) resolveService(srvName, srvType string) (*
 			e := <-entriesChannel
 			zconflog.Debug.Println("resolveService: result=", e)
 			tcp4 := net.TCPAddr{e.AddrIPv4, e.Port, ""}
-			r1 := &zeroconfResolveReply{e.Instance, &tcp4, e.Text}
+			r1 := &zeroconfResolveReply{e.Instance, &tcp4, reworkTxt(e.Text)}
 			req.result <- r1
 			if e.AddrIPv4 == nil {
 				tcp6 := net.TCPAddr{e.AddrIPv6, e.Port, ""}
-				r2 := &zeroconfResolveReply{e.Instance, &tcp6, e.Text}
+				r2 := &zeroconfResolveReply{e.Instance, &tcp6, reworkTxt(e.Text)}
 				req.result <- r2
 			}
 		}

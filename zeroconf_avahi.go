@@ -1,4 +1,4 @@
-// +build ignore
+// +build linux
 
 package raopd
 
@@ -14,10 +14,12 @@ type zeroconfAvahiImplementation struct {
 }
 
 func init() {
-	zeroconf = &zeroconfAvahiImplementation{}
-
-	requestChan = make(chan reqFunc, 5)
-	go runResolver(requestChan)
+	registerZeroconfProvider(100, "Avahi",
+		func() zeroconfImplementation {
+			requestChan = make(chan reqFunc, 5)
+			go runResolver(requestChan)
+			return &zeroconfAvahiImplementation{}
+		})
 }
 
 func (bi *zeroconfAvahiImplementation) zeroconfCleanUp() {
@@ -143,7 +145,7 @@ func runResolver(requestChan chan reqFunc) {
 					txt := toStringArray(s.Body[9].([][]byte))
 					name := toString(s.Body[5])
 					if err == nil {
-						req.result <- &zeroconfResolveReply{name, addr, txt}
+						req.result <- &zeroconfResolveReply{name, addr, reworkTxt(txt)}
 					} else {
 						zconflog.Info.Println("Could not resolve address '", addr, "': ", err)
 					}

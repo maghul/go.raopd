@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
 
 var zconflog = logger.GetLogger("raopd.zeroconf")
-var zeroconf zeroconfImplementation
 
 type zeroconfRecord struct {
 	serviceName   string
@@ -134,7 +134,7 @@ type zeroconfResolveRequest struct {
 type zeroconfResolveReply struct {
 	name string
 	addr *net.TCPAddr
-	txt  []string
+	txt  map[string]string
 }
 
 func toStringArray(d [][]byte) []string {
@@ -143,4 +143,49 @@ func toStringArray(d [][]byte) []string {
 		r[ii] = string(d[ii])
 	}
 	return r
+}
+
+//  ------------------------- Providers ---------------------------------------------
+
+type zeroconfProvider struct {
+	priority int
+	name     string
+	factory  func() zeroconfImplementation
+}
+
+type zeroconfProviders []*zeroconfProvider
+
+func (a zeroconfProviders) Len() int           { return len(a) }
+func (a zeroconfProviders) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a zeroconfProviders) Less(i, j int) bool { return a[i].priority < a[j].priority }
+
+var registeredProviders = zeroconfProviders{}
+
+func registerZeroconfProvider(prio int, name string, factory func() zeroconfImplementation) {
+	zcp := &zeroconfProvider{prio, name, factory}
+	registeredProviders = append(registeredProviders, zcp)
+}
+
+var _zeroconf zeroconfImplementation
+
+func zeroconf() zeroconfImplementation {
+	if _zeroconf != nil {
+		return _zeroconf
+	}
+	sort.Sort(registeredProviders)
+	for _, p := range registeredProviders {
+		zconflog.Debug.Println("Trying to start ", p.name, " Zeroconf provider")
+		_zeroconf = p.factory()
+		if _zeroconf != nil {
+			zconflog.Info.Println("Started ", p.name, " Zeroconf provider")
+			return _zeroconf
+		}
+	}
+	zconflog.Info.Println("Could not find any working ZeroConf libraries")
+	os.Exit(-1)
+	return nil
+}
+
+func reworkTxt([]string) map[string]string {
+	return nil
 }

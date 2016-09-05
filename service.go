@@ -49,11 +49,11 @@ func (sc *SinkCollection) Close() {
 	}
 
 	for sink, source := range s {
-		zeroconf.Unpublish(source.br)
+		zeroconf().Unpublish(source.br)
 		sink.Closed()
 	}
 
-	zeroconf.zeroconfCleanUp() // TODO: will cleanup too much
+	zeroconf().zeroconfCleanUp() // TODO: will cleanup too much
 }
 
 /*
@@ -77,7 +77,7 @@ func (sc *SinkCollection) Register(sink Sink) (*Source, error) {
 	source.raop.startRtspProcess()
 
 	source.raop.br = makeAPBonjourRecord(&source.raop)
-	err := zeroconf.Publish(source.raop.br)
+	err := zeroconf().Publish(source.raop.br)
 	if err != nil {
 		source.raop.close()
 		return nil, err
@@ -100,7 +100,7 @@ func (sc *SinkCollection) Unregister(sink Sink) {
 	}
 
 	netlog.Debug.Println("Service Close")
-	zeroconf.Unpublish(source.br)
+	zeroconf().Unpublish(source.br)
 	sink.Closed()
 }
 
