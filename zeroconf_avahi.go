@@ -11,14 +11,35 @@ import (
 )
 
 type zeroconfAvahiImplementation struct {
+	dconn *dbus.Conn
+	obj   *dbus.Object
+	fqdn  string
 }
 
 func init() {
 	registerZeroconfProvider(100, "Avahi",
 		func() zeroconfImplementation {
+			dconn, err := dbus.SystemBus()
+			if err != nil {
+				zconflog.Debug.Println("dbus.SystemBus error ", err)
+				return nil
+			}
+			obj := dconn.Object("org.freedesktop.Avahi", "/")
+			if obj == nil {
+				zconflog.Debug.Println("Could not get Avahi DBUS object, probably not available")
+				return nil
+			}
+			hn := obj.Call("org.freedesktop.Avahi.Server.GetHostNameFqdn", 0)
+			if hn.Err != nil {
+				zconflog.Debug.Println("Error GetHostNameFqdb ", hn.Err.Error())
+				return nil
+			}
+			var fqdn string
+			hn.Store(&fqdn)
+			zconflog.Debug.Println("Avahi FQDN=", fqdn)
 			requestChan = make(chan reqFunc, 5)
 			go runResolver(requestChan)
-			return &zeroconfAvahiImplementation{}
+			return &zeroconfAvahiImplementation{dconn, obj, fqdn}
 		})
 }
 
@@ -36,26 +57,16 @@ func (bi *zeroconfAvahiImplementation) Unpublish(r *zeroconfRecord) {
 }
 
 func (bi *zeroconfAvahiImplementation) Publish(r *zeroconfRecord) error {
-	var dconn *dbus.Conn
-	var obj *dbus.Object
 	var path dbus.ObjectPath
-	var err error
 
 	zconflog.Debug.Println("Publish: r=", r)
 
 	if r.obj != nil {
 		return errors.New(fmt.Sprintf("Service '%s' is alread published", r.serviceName))
 	}
-	dconn, err = dbus.SystemBus()
-	if err != nil {
-		zconflog.Debug.Println("dbus.SystemBus error ", err)
-		return err
-	}
 
-	obj = dconn.Object("org.freedesktop.Avahi", "/")
-	obj.Call("org.freedesktop.Avahi.Server.EntryGroupNew", 0).Store(&path)
-
-	r.obj = dconn.Object("org.freedesktop.Avahi", path)
+	bi.obj.Call("org.freedesktop.Avahi.Server.EntryGroupNew", 0).Store(&path)
+	r.obj = bi.dconn.Object("org.freedesktop.Avahi", path)
 
 	// http://www.dns-sd.org/ServiceTypes.html
 	c := r.dbusObject().Call("org.freedesktop.Avahi.EntryGroup.AddService", 0,
