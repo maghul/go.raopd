@@ -1,4 +1,4 @@
-// +build linux windows
+// +build !linux
 
 package raopd
 
@@ -8,6 +8,8 @@ import (
 	"github.com/andrewtj/dnssd"
 )
 
+// This calls the Apple(TM) Bonjour(TM) library to resolve
+// and publish DNS-SD records
 type zeroconfBonjourImplementation struct {
 }
 
@@ -18,12 +20,15 @@ func init() {
 		})
 }
 
-// This calls the Apple(TM) Bonjour(TM) library to resolve
-// and publish DNS-SD records
+func (bi *zeroconfBonjourImplementation) fqdn() string {
+	return defaultGetMyFQDN()
+}
+
 func (bi *zeroconfBonjourImplementation) zeroconfCleanUp() {
 }
 
-func (bi *zeroconfBonjourImplementation) Unpublish(r *zeroconfRecord) {
+func (bi *zeroconfBonjourImplementation) Unpublish(r *zeroconfRecord) error {
+	return nil
 }
 
 func (bi *zeroconfBonjourImplementation) Publish(r *zeroconfRecord) error {

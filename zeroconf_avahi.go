@@ -11,9 +11,9 @@ import (
 )
 
 type zeroconfAvahiImplementation struct {
-	dconn *dbus.Conn
-	obj   *dbus.Object
-	fqdn  string
+	dconn  *dbus.Conn
+	obj    *dbus.Object
+	myfqdn string
 }
 
 func init() {
@@ -46,14 +46,19 @@ func init() {
 func (bi *zeroconfAvahiImplementation) zeroconfCleanUp() {
 }
 
+func (bi *zeroconfAvahiImplementation) fqdn() string {
+	return bi.myfqdn
+}
+
 func (r *zeroconfRecord) dbusObject() *dbus.Object {
 	return (r.obj).(*dbus.Object)
 }
 
-func (bi *zeroconfAvahiImplementation) Unpublish(r *zeroconfRecord) {
-	zconflog.Debug.Println("Unpublishing! ", r.serviceName, " from service on port=", r.Port)
+func (bi *zeroconfAvahiImplementation) Unpublish(r *zeroconfRecord) error {
+	zconflog.Debug.Println("avahi Unpublishing! ", r.serviceName, " from service on port=", r.Port)
 	r.dbusObject().Call("org.freedesktop.Avahi.EntryGroup.Free", 0)
 	r.obj = nil
+	return nil
 }
 
 func (bi *zeroconfAvahiImplementation) Publish(r *zeroconfRecord) error {

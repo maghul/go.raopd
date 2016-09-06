@@ -27,7 +27,7 @@ type zeroconfRecord struct {
 
 type zeroconfImplementation interface {
 	Publish(r *zeroconfRecord) error
-	Unpublish(r *zeroconfRecord)
+	Unpublish(r *zeroconfRecord) error
 	resolveService(srvName, srvType string) (*zeroconfResolveRequest, error)
 	close(*zeroconfResolveRequest)
 	zeroconfCleanUp()
@@ -36,7 +36,7 @@ type zeroconfImplementation interface {
 var registeredServers = make(map[string]*zeroconfRecord)
 
 // Get Fully Qualified Bonjour Domain Name
-func getMyFQDN() string {
+func defaultGetMyFQDN() string {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return "unknown"
@@ -188,4 +188,8 @@ func zeroconf() zeroconfImplementation {
 
 func reworkTxt([]string) map[string]string {
 	return nil
+}
+
+func Unpublish(zr *zeroconfRecord) error {
+	return zeroconf().Unpublish(zr)
 }
