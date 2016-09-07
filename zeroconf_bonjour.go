@@ -32,9 +32,16 @@ func (bi *zeroconfBonjourImplementation) Unpublish(r *zeroconfRecord) error {
 }
 
 func (bi *zeroconfBonjourImplementation) Publish(r *zeroconfRecord) error {
+	ec := make(chan error)
 	zconflog.Debug.Println("Publish: r=", r)
 	f := func(op *dnssd.RegisterOp, err error, add bool, name, serviceType, domain string) {
-		println("name=", name, ", add=", add)
+		if err != nil {
+			zconflog.Info.Println("Could not publish RAOPD: ", err)
+			// TODO: Invalidate this ZeroConf implementation and tru the next
+		} else {
+			zconflog.Info.Println("Published; name=", name, ", add=", add)
+		}
+		ec <- err
 	}
 
 	ro := dnssd.NewRegisterOp(r.serviceName, r.serviceType, int(r.Port), f)
@@ -44,7 +51,12 @@ func (bi *zeroconfBonjourImplementation) Publish(r *zeroconfRecord) error {
 	err := ro.Start()
 	if err == nil {
 		registeredServers[r.serviceName] = r
+	} else {
+		return err
 	}
+
+	err = <-ec
+
 	return err
 }
 

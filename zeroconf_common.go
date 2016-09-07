@@ -3,6 +3,7 @@ package raopd
 import (
 	"bytes"
 	"emh/logger"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -172,15 +173,6 @@ func zeroconf() zeroconfImplementation {
 	if _zeroconf != nil {
 		return _zeroconf
 	}
-	sort.Sort(registeredProviders)
-	for _, p := range registeredProviders {
-		zconflog.Debug.Println("Trying to start ", p.name, " Zeroconf provider")
-		_zeroconf = p.factory()
-		if _zeroconf != nil {
-			zconflog.Info.Println("Started ", p.name, " Zeroconf provider")
-			return _zeroconf
-		}
-	}
 	zconflog.Info.Println("Could not find any working ZeroConf libraries")
 	os.Exit(-1)
 	return nil
@@ -192,4 +184,32 @@ func reworkTxt([]string) map[string]string {
 
 func Unpublish(zr *zeroconfRecord) error {
 	return zeroconf().Unpublish(zr)
+}
+
+func Publish(zr *zeroconfRecord) error {
+	zconflog.Debug.Println("Trying to publish ", zr)
+
+	if _zeroconf == nil {
+		sort.Sort(registeredProviders)
+		for _, p := range registeredProviders {
+			zconflog.Debug.Println("Trying to start ", p.name, " Zeroconf provider")
+			_zeroconf = p.factory()
+			if _zeroconf != nil {
+				zconflog.Info.Println("Started ", p.name, " Zeroconf provider")
+				err := _zeroconf.Publish(zr)
+				if err == nil {
+					zconflog.Info.Println("Published ", zr, " with ", p.name, " Zeroconf provider")
+					return nil
+				}
+			}
+		}
+	} else {
+		err := _zeroconf.Publish(zr)
+		if err != nil {
+			return err
+		}
+		zconflog.Info.Println("Published ", zr, " established Zeroconf provider")
+		return nil
+	}
+	return errors.New("Could not find any working ZeroConf libraries")
 }

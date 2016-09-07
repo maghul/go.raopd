@@ -51,7 +51,6 @@ func (bi *zeroconfPureImplementation) Publish(r *zeroconfRecord) error {
 	var err error
 	zconflog.Info.Println("zeroconf_pure: Publish r=", r)
 
-	fmt.Println("Tjaba!")
 	addrs, err := net.LookupIP(r.serviceHost)
 	if err != nil {
 		// Try appending the host domain suffix and lookup again
