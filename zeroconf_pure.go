@@ -5,14 +5,21 @@ package raopd
 // on the host.
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
-	"github.com/oleksandr/bonjour"
+	"github.com/maghul/go.dnssd"
+	"github.com/miekg/dns"
 )
 
 type zeroconfPureImplementation struct {
+}
+
+type zeroconfPureService struct {
+	cancel context.CancelFunc
 }
 
 func init() {
@@ -20,6 +27,19 @@ func init() {
 		func() zeroconfImplementation {
 			return &zeroconfPureImplementation{}
 		})
+
+	raoplogg := func(data ...interface{}) {
+		s := fmt.Sprint(data)
+		if strings.Contains(s, "raop") {
+			zconflog.Debug.Println("QUERIES", data)
+		}
+	}
+	dnssd.SetLog("q", raoplogg)
+	logg := func(data ...interface{}) {
+		zconflog.Debug.Println(data)
+	}
+	dnssd.SetLog("dnssd", logg)
+
 }
 
 func (bi *zeroconfPureImplementation) fqdn() string {
@@ -32,90 +52,78 @@ func (bi *zeroconfPureImplementation) zeroconfCleanUp() {
 
 	for _, r := range rs {
 		zconflog.Debug.Println("Cleanup: Unpublishing! ", r.serviceName, " from service on port=", r.Port)
-		s := r.obj.(*bonjour.Server)
-		s.Shutdown()
+		c := r.obj.(*zeroconfPureService)
+		c.cancel()
 	}
+	// TODO: We should wait for cleanup to complete, not timeout...
+	time.Sleep(3 * time.Second)
 }
 
 func (bi *zeroconfPureImplementation) Unpublish(r *zeroconfRecord) error {
 	zconflog.Debug.Println("pure Unpublishing! ", r.serviceName, " from service on port=", r.Port)
 	delete(registeredServers, r.serviceName)
-	s := r.obj.(*bonjour.Server)
-	s.Shutdown()
+	c := r.obj.(*zeroconfPureService)
+	c.cancel()
 	return nil
 }
 
 func (bi *zeroconfPureImplementation) Publish(r *zeroconfRecord) error {
 
-	zconflog.Debug.Println("Publish: r=", r)
+	zconflog.Debug.Println("pure Publish: r=", r)
 	var err error
-	zconflog.Info.Println("zeroconf_pure: Publish r=", r)
-
-	addrs, err := net.LookupIP(r.serviceHost)
-	if err != nil {
-		// Try appending the host domain suffix and lookup again
-		// (required for Linux-based hosts)
-		tmpHostName := fmt.Sprintf("%s%s.", r.serviceHost, r.serviceDomain)
-		addrs, err = net.LookupIP(tmpHostName)
-		if err != nil {
-			fmt.Printf("Could not determine host IP addresses for %s", r.serviceHost)
-			return fmt.Errorf("Could not determine host IP addresses for %s", r.serviceHost)
-		}
-	}
-	host := fmt.Sprintf("%s.", r.serviceHost)
-	ip := fmt.Sprintf("%v", addrs[0])
-	r.obj, err = bonjour.RegisterProxy(r.serviceName, r.serviceType, r.serviceDomain, int(r.Port), host, ip, toStringArray(r.text), nil)
-	println("---- Error: ", err)
-	//r.obj, err = bonjour.Register(r.serviceName, r.serviceType, r.serviceDomain, int(r.Port), toStringArray(r.text), nil)
-	if err == nil {
-		registeredServers[r.serviceName] = r
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.obj = &zeroconfPureService{cancel}
+	registeredServers[r.serviceName] = r
+	dnssd.Register(ctx, 0, 0, r.serviceName, r.serviceType, r.serviceDomain, r.serviceHost, r.Port, r.txtAsStringArray(),
+		func(flags int, serviceName, regType, domain string) {
+			zconflog.Info.Println("zeroconf_pure: Completed publish r=", r)
+		}, func(err error) {
+			zconflog.Info.Println("zeroconf_pure: Error publishing r=", r, ", error=", err)
+		})
 	return err
 }
 
 // -------------------------- resolve ---------------------------------------------------------------
 
 func (bi *zeroconfPureImplementation) resolveService(srvName, srvType string) (*zeroconfResolveRequest, error) {
-	srvName = strings.Replace(srvName, "@", "\\@", -1)
+	//	srvName = strings.Replace(srvName, "@", "\\@", -1)
 	zconflog.Debug.Println("resolveService: name=", srvName, ", type=", srvType)
 	result := make(chan *zeroconfResolveReply, 4)
 	req := &zeroconfResolveRequest{zeroconfResolveKey{srvName, srvType}, result, nil}
 
-	resolver, err := bonjour.NewResolver(nil)
-	if err != nil {
-		return nil, err
+	errc := func(err error) {
 	}
-	req.resolveObj = resolver
-	entriesChannel := make(chan *bonjour.ServiceEntry)
-	go func() {
-		for {
-			zconflog.Debug.Println("resolveService: result...")
-			e := <-entriesChannel
-			zconflog.Debug.Println("resolveService: result=", e)
-			zconflog.Debug.Println("resolveService: result IPv4=", e.AddrIPv4)
-			zconflog.Debug.Println("resolveService: result IPv6=", e.AddrIPv6)
-			instance := strings.Replace(e.Instance, "\\@", "@", -1)
 
-			if e.AddrIPv4 != nil {
-				tcp4 := net.TCPAddr{e.AddrIPv4, e.Port, ""}
-				r1 := &zeroconfResolveReply{instance, &tcp4, reworkTxt(e.Text)}
-				zconflog.Debug.Println("resolveService: r1=", r1)
-				req.result <- r1
-			}
-			if e.AddrIPv6 != nil {
-				tcp6 := net.TCPAddr{e.AddrIPv6, e.Port, ""}
-				r2 := &zeroconfResolveReply{instance, &tcp6, reworkTxt(e.Text)}
-				zconflog.Debug.Println("resolveService: r2=", r2)
-				req.result <- r2
-			}
-		}
-	}()
-	resolver.Lookup(srvName, srvType, "local.", entriesChannel)
+	ctx, cancel := context.WithCancel(context.Background())
+	dnssd.Resolve(ctx, 0, 0, srvName, srvType, "",
+		func(flags dnssd.Flags, ifIndex int, fullName, hostName string, port uint16, txt []string) {
+			zconflog.Debug.Println("zeroconf resolved: ifIndex=", ifIndex, ",serviceName=", fullName, ", hostName=", hostName, ":", port)
+			cancel()
+
+			ctx, cancel = context.WithCancel(context.Background())
+			dnssd.Query(ctx, 0, ifIndex, &dns.Question{Name: hostName, Qtype: dns.TypeA, Qclass: dns.ClassINET},
+				func(flags dnssd.Flags, ifIndex int, rr dns.RR) {
+					a := rr.(*dns.A)
+					tcpAddr := net.TCPAddr{IP: a.A, Port: int(port), Zone: ""}
+					zconflog.Debug.Println("zeroconf pure question: ifIndex=", ifIndex, ",serviceName=", fullName, ", hostName=", hostName, ":", port, ", tcpAddr=", tcpAddr)
+					req.result <- &zeroconfResolveReply{hostName, &tcpAddr, reworkTxt(txt)}
+					cancel()
+				}, errc)
+
+			ctx, cancel = context.WithCancel(context.Background())
+			dnssd.Query(ctx, 0, ifIndex, &dns.Question{Name: hostName, Qtype: dns.TypeAAAA, Qclass: dns.ClassINET},
+				func(flags dnssd.Flags, ifIndex int, rr dns.RR) {
+					aaaa := rr.(*dns.AAAA)
+					tcpAddr := net.TCPAddr{IP: aaaa.AAAA, Port: int(port), Zone: ""}
+					zconflog.Debug.Println("zeroconf pure question: ifIndex=", ifIndex, ",serviceName=", fullName, ", hostName=", hostName, ":", port, ", tcpAddr=", tcpAddr)
+					req.result <- &zeroconfResolveReply{hostName, &tcpAddr, reworkTxt(txt)}
+					cancel()
+				}, errc)
+
+		}, errc)
 	return req, nil
 
 }
 
 func (bi *zeroconfPureImplementation) close(req *zeroconfResolveRequest) {
-	resolver := req.resolveObj.(*bonjour.Resolver)
-	resolver.Exit <- true
 }
