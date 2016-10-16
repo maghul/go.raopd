@@ -73,6 +73,16 @@ func (br *zeroconfRecord) appendText(v ...string) {
 	}
 }
 
+func (zr *zeroconfRecord) txtAsStringArray() []string {
+	txt := make([]string, len(zr.text))
+	ii := 0
+	for _, keyValue := range zr.text {
+		txt[ii] = string(keyValue)
+		ii++
+	}
+	return txt
+}
+
 func hardwareAddressToServicePrefix(hwaddr net.HardwareAddr) string {
 	s := hwaddr.String()
 	s = strings.Replace(s, ":", "", -1)
