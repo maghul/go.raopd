@@ -7,16 +7,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestZeroconfBrowse(t *testing.T) {
+func NoTestZeroconfBrowse(t *testing.T) {
 	br := &zeroconfRecord{}
 	br.serviceName = "0029B0A72096@PlingPlong"
 	br.serviceType = "_knytte._tcp"
 	br.serviceDomain = "local" // sdomain
-	br.serviceHost = defaultGetMyFQDN()
+	br.serviceHost = "flurer"
 	br.Port = 7777
 	Publish(br)
 
-	time.Sleep(1000000000)
+	assert.NotNil(t, br)
+	time.Sleep(4 * time.Second)
+
 	req, err := zeroconf().resolveService("0029B0A72096@PlingPlong", br.serviceType)
 	if err != nil {
 		panic(err)
@@ -24,5 +26,10 @@ func TestZeroconfBrowse(t *testing.T) {
 	addr := <-req.result
 	zconflog.Debug.Println("Got result: ", addr, addr.addr, addr.txt)
 	assert.NotNil(t, addr)
+
+	time.Sleep(14 * time.Second)
+	Unpublish(br)
+	time.Sleep(20 * time.Second)
 	zeroconf().zeroconfCleanUp()
+
 }
