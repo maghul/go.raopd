@@ -73,7 +73,7 @@ func (tc *testClient) AudioWriterErr(err error) {
 func makeTestClient() Sink {
 	tc := &testClient{}
 	tc.si = &SinkInfo{}
-	tc.si.Port = 15100
+	tc.si.Port = 0
 	tc.si.HardwareAddress, _ = net.ParseMAC("11:22:33:13:37:17")
 	return tc
 }

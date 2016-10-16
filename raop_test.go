@@ -50,8 +50,8 @@ func TestRaopSetup(t *testing.T) {
 	assert.Equal(t, "RAOP: hw=11:22:33:13:37:17", source.raop.String())
 	assert.NotNil(t, source)
 
-
-	conn, err := net.Dial("tcp", "127.0.0.1:15100")
+	dialstr := fmt.Sprint("127.0.0.1:", source.port())
+	conn, err := net.Dial("tcp", dialstr)
 	if err != nil {
 		panic(err)
 	}
