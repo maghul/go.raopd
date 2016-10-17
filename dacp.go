@@ -16,7 +16,10 @@ type dacp struct {
 	req  *zeroconfResolveRequest
 	mrc  chan func() error // For unconnected requests
 	crc  chan func() error // For connected requests
-	addr *net.TCPAddr
+
+	addr4         *net.TCPAddr
+	addr6         *net.TCPAddr
+	connectedName string
 }
 
 var dacplog = logger.GetLogger("raopd.dacp")
@@ -35,7 +38,8 @@ func (d *dacp) open(id string, ar string) {
 		if d.id == id && d.ar == ar {
 			//			dacplog.Debug().Println( "Already resolved/resolving id=", d.id, ", ar=", d.ar)
 		} else {
-			d.addr = nil // Invalidate the old connection.
+			d.addr4 = nil // Invalidate the old connection.
+			d.addr6 = nil // Invalidate the old connection.
 			dacplog.Debug.Println("DACP: open connection to id=", id, ", ar=", ar)
 			d.id = id
 			d.ar = ar
@@ -61,7 +65,8 @@ func (d *dacp) close() {
 		dacplog.Debug.Println("Closing current DACP session.")
 		d.id = ""
 		d.ar = ""
-		d.addr = nil
+		d.addr4 = nil
+		d.addr6 = nil
 		zeroconf().close(d.req)
 		d.req = nil
 		return nil
@@ -94,10 +99,13 @@ volumeup 	turn audio volume up
 func (d *dacp) tx(cmd string) {
 	d.crc <- func() error {
 		dacplog.Debug.Println("Sending Command", cmd)
-		url := fmt.Sprintf("http://%s/ctrl-int/1/%s", d.addr, cmd)
+		url, err := d.getCommandUrl(cmd)
+		if err != nil {
+			return err
+		}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "DACP: error in request", err)
+			return err
 		}
 		req.Header.Add("Active-Remote", d.ar)
 		dacplog.Debug.Println("DACP: req=", req.URL)
@@ -111,22 +119,50 @@ func (d *dacp) tx(cmd string) {
 	}
 }
 
+func (d *dacp) getCommandUrl(cmd string) (string, error) {
+	if d.addr4 != nil {
+		return fmt.Sprintf("http://%s/ctrl-int/1/%s", d.addr4, cmd), nil
+	} else if d.addr4 != nil {
+		return fmt.Sprintf("http://%s/ctrl-int/1/%s", d.addr6, cmd), nil
+	}
+	return "", errors.New("Could not find an address for DACP URL")
+}
+
+func (d *dacp) setResolvedAddress(rr *zeroconfResolveReply) {
+	dacplog.Debug.Println("DACP RR=", rr)
+	ip := rr.addr.IP
+	if ip.To4() != nil {
+		dacplog.Info.Println("DACP Address was updated, old address=", d.addr4, ", new address=", rr.addr)
+		if d.addr4 != rr.addr {
+			d.addr4 = rr.addr
+		}
+	} else if ip.To16() != nil {
+		dacplog.Info.Println("DACP Address was updated, old address=", d.addr6, ", new address=", rr.addr)
+		if d.addr6 != rr.addr {
+			d.addr6 = rr.addr
+		}
+	} else {
+		dacplog.Info.Println("Internal error: Can not handle this IP address: ", rr.addr)
+		os.Exit(-1)
+	}
+
+	if d.connectedName != rr.name {
+		d.sink.Connected(rr.name)
+		d.connectedName = rr.name
+	}
+}
+
+func (d *dacp) isConnected() bool {
+	return d.addr4 != nil || d.addr6 != nil
+}
+
 func (d *dacp) runDacp() {
 	var err error
 
 	for {
 
 		switch {
-		case d.addr != nil && d.req == nil:
-			// This means we have an address but no zeroconf request running.
-			// Currently this should not be possible.
-			select {
-			case dr := <-d.mrc:
-				err = dr()
-			case dr := <-d.crc:
-				err = dr()
-			}
-		case d.addr != nil && d.req != nil:
+		case d.isConnected() && d.req != nil:
 			// This means we have an address so we can happily process our requests
 			// if do get an update from zeroconf we just log it and change the address
 			// for future requests.
@@ -136,11 +172,7 @@ func (d *dacp) runDacp() {
 			case dr := <-d.crc:
 				err = dr()
 			case rr := <-d.req.result:
-				dacplog.Debug.Println("DACP UNSOLICITED RR=", rr)
-				if d.addr != rr.addr {
-					dacplog.Info.Println("DACP UNSOLICITED Address mismatch, current address=", d.addr, ", RR address=", rr.addr)
-					d.addr = rr.addr
-				}
+				d.setResolvedAddress(rr)
 			}
 		case d.req != nil:
 			// This means we have no address and can't send any requests, but there
@@ -150,9 +182,7 @@ func (d *dacp) runDacp() {
 			case dr := <-d.mrc:
 				err = dr()
 			case rr := <-d.req.result:
-				dacplog.Debug.Println("DACP RR=", rr)
-				d.addr = rr.addr
-				d.sink.Connected(rr.name)
+				d.setResolvedAddress(rr)
 			}
 		default:
 			// This means we have no address and no request for DACP. Just wait
@@ -163,7 +193,8 @@ func (d *dacp) runDacp() {
 		}
 		if err != nil {
 			dacplog.Info.Println(err)
-			d.addr = nil // Should we try to ask again?
+			d.addr4 = nil // Should we try to ask again?
+			d.addr6 = nil // Should we try to ask again?
 		}
 	}
 }
