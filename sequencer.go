@@ -19,6 +19,8 @@ type sequencer struct {
 	lowd    bool
 	retries map[seqno]int
 	packets map[seqno]*rtpPacket
+
+	sl *sequencelog
 }
 
 type rerequest struct {
@@ -62,9 +64,8 @@ func (m *sequencer) flushCached(sn seqno, outf func(pkt *rtpPacket)) {
 	for {
 		sn++
 		pkt, ok := m.packets[sn]
-		//seqlog.Debug.Println("sequencer::handle: FLUSH seqno=", seqno, " exists=", ok)
 		if ok {
-			m.logOut(sn)
+			m.sl.outputPacket(pkt)
 			outf(pkt)
 			delete(m.packets, sn)
 		} else {
@@ -72,12 +73,6 @@ func (m *sequencer) flushCached(sn seqno, outf func(pkt *rtpPacket)) {
 		}
 	}
 	m.low = sn
-}
-
-func (m *sequencer) logOut(sn seqno) {
-	if sn%1000 == 0 {
-		seqlog.Debug.Println(m.ref, " sequencer::logOut: output sequence number=", sn)
-	}
 }
 
 // handle an incoming packet.
@@ -90,27 +85,24 @@ func (m *sequencer) handle(pkt *rtpPacket, outf func(pkt *rtpPacket)) {
 	if !m.lowd {
 		if pkt.recovery {
 			// Ignore recovery packets if the sequencer has been restarted
+			m.sl.inputPacket(pkt, "SEQUENCER RESTART")
 			return
 		} else {
 			m.lowd = true
 			m.low = sn
-			seqlog.Debug.Println(m.ref, " sequencer::handle: Initial seqno=", sn)
+			m.sl.note(" sequencer::handle: Initial seqno=", sn)
 		}
-	}
-	if m.retries[sn] > 0 {
-		seqlog.Debug.Println(m.ref, " sequencer::handle: Filled gap", sn)
 	}
 	delete(m.retries, sn)
 	if m.low == sn {
-		m.logOut(sn)
+		m.sl.inputPacket(pkt, "")
+		m.sl.outputPacket(pkt)
 		outf(pkt)
 		m.flushCached(sn+1, outf)
 	} else if seqnoDelta(sn, m.low) < 0 {
-		seqlog.Debug.Println(m.ref, " sequencer::handle: too old packet", sn)
+		m.sl.inputPacket(pkt, "OLD DISCARDED")
 	} else {
-		if !m.inRecovery() {
-			seqlog.Debug.Println(m.ref, " sequencer::handle: starting recovery on packet=", sn, ", low=", m.low)
-		}
+		m.sl.inputPacket(pkt, "RECOVER")
 		m.packets[sn] = pkt
 	}
 }
@@ -154,11 +146,11 @@ func (m *sequencer) sendReRequests(request chan rerequest) {
 		}
 		if count > 0 {
 			switch retry {
-			case 1, 4, 9: // Send rerequest at 10ms, 40ms, and 90ms
+			case 3, 11, 23: // Send rerequest at 30ms, 110ms, and 230ms
 				rr := &rerequest{start, count}
-				seqlog.Debug.Println(m.ref, " sequencer::sendReRequest: rerequest=", rr)
+				m.sl.reRequest(rr, retry)
 				request <- *rr
-			case 15: // Well I don't think we'll get any packets after 150 ms
+			case 37: // Well I don't think we'll get any packets after 370 ms
 				m.remove(start, count)
 			}
 		}
@@ -168,6 +160,7 @@ func (m *sequencer) sendReRequests(request chan rerequest) {
 // Remove all retries and packets starting with start and count entries
 // low will be set to the new start
 func (m *sequencer) remove(start, count seqno) {
+	m.sl.removePackets(start, count)
 	for ii := count; ii > 0; ii-- {
 		delete(m.packets, start)
 		delete(m.retries, start)
@@ -183,6 +176,8 @@ func startSequencer(ref string, data chan *rtpPacket, outf func(pkt *rtpPacket),
 	m.control = make(chan int, 0)
 	m.restartSequencer()
 	m.ref = ref
+
+	m.sl = makeSequenceLog(ref)
 
 	timeout := time.Duration(10 * time.Millisecond) // 10 mS
 	timer := time.NewTimer(timeout)
@@ -221,10 +216,10 @@ func startSequencer(ref string, data chan *rtpPacket, outf func(pkt *rtpPacket),
 		command:
 			switch cmd {
 			case 0:
-				seqlog.Debug.Println(m.ref, " Restarting Sequencer")
+				m.sl.note("Restarting Sequencer")
 				m.restartSequencer()
 			case 1:
-				seqlog.Debug.Println(m.ref, " Shutting down Sequencer")
+				m.sl.note("Shutting down Sequencer")
 				return
 			}
 
