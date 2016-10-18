@@ -9,6 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func init() {
+	debugSequenceLogFlag = true
+}
+
 func inSeqRange(in chan *rtpPacket, from, to int) {
 	for ii := from; ii != to+1; ii++ {
 		in <- testPacket(seqno(ii), 0)

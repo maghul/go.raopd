@@ -8,6 +8,7 @@ import (
 )
 
 var seqlog = logger.GetLogger("raopd.sequencer")
+var debugSequenceLogFlag bool
 
 type sequencer struct {
 	// Control channel
@@ -177,7 +178,9 @@ func startSequencer(ref string, data chan *rtpPacket, outf func(pkt *rtpPacket),
 	m.restartSequencer()
 	m.ref = ref
 
-	m.sl = makeSequenceLog(ref)
+	if debugSequenceLogFlag {
+		m.sl = makeSequenceLog(ref)
+	}
 
 	timeout := time.Duration(10 * time.Millisecond) // 10 mS
 	timer := time.NewTimer(timeout)
