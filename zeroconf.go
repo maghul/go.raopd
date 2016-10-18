@@ -146,10 +146,16 @@ func (r *bonjourRecord) Publish() error {
 		r.Port,          // port
 		r.text)          // text record
 	if c.Err != nil {
+		zconflog.Debug.Println("org.freedesktop.Avahi.EntryGroup.AddService error ", c.Err.Error())
 		return c.Err
 	}
-	r.obj.Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
+
 	zconflog.Debug.Println("Publishing! ", r.serviceName, " as service on port=", r.Port)
+	c = r.obj.Call("org.freedesktop.Avahi.EntryGroup.Commit", 0)
+	if c.Err != nil {
+		zconflog.Info.Println("org.freedesktop.Avahi.EntryGroup.Commit ", r.serviceName, ", err=", c.Err)
+		return c.Err
+	}
 
 	return nil
 }
