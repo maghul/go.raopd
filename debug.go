@@ -49,7 +49,13 @@ func getLoggerImplementation(name string, logger interface{}) (iLogger, error) {
 	}
 
 	if li, ok := logger.(iLogger); ok {
-		return li, nil
+		var lgi loggerImpl = func(d ...interface{}) {
+			b := make([]interface{}, 0, 2+len(d))
+			b = append(b, name, ":")
+			b = append(b, d...)
+			li.Println(b...)
+		}
+		return lgi, nil
 	}
 
 	if iowr, ok := logger.(io.Writer); ok {
@@ -104,6 +110,11 @@ func Debug(name string, value interface{}) error {
 	case name == "sequencetrace":
 		flag, _ := value.(bool)
 		debugSequenceLogFlag = flag
+		return nil
+	case strings.HasPrefix(name, "log.info/"):
+		return setLogger(name[9:], true, value)
+	case strings.HasPrefix(name, "log.debug/"):
+		return setLogger(name[10:], false, value)
 	}
-
+	return errors.New(fmt.Sprint("Debug name '", name, "' is unknown"))
 }
