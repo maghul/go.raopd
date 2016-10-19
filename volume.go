@@ -1,5 +1,9 @@
 package raopd
 
+import (
+	"time"
+)
+
 var volumelog = getLogger("raopd.volume")
 var volumetracelog bool
 
@@ -186,6 +190,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 					}
 					mode = ":Relative: "
 					v.tl.trace(mode, " Starting")
+					centered := time.Now()
 					for {
 						select {
 						case dVolume := <-v.deviceVolumeChan:
@@ -195,17 +200,23 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 							if between(newVolume, 50, serviceVolume) && inCenter(newVolume) {
 								v.tl.trace(mode, "STOP [ newVolume=", newVolume, ", targetVolume=", 50, ", serviceVolume=", serviceVolume, "], inCenter=", inCenter(newVolume))
 								serviceVolume = newVolume
+								centered = time.Now()
 							} else {
-								if newVolume > serviceVolume && newVolume > 50 {
-									v.tl.trace(mode, "Send Service Volume UP")
-									setServiceVolume(1000)
-								}
+								guardTime := time.Now().Sub(centered)
+								if guardTime > 100*time.Millisecond {
+									// Don't send volume up and down unless the volume knob
+									// centered more than 100ms ago, we do get stray volume
+									// calls after pushing the button around.
+									if newVolume > serviceVolume && newVolume > 50 {
+										v.tl.trace(mode, "Send Service Volume UP")
+										setServiceVolume(1000)
+									}
 
-								if newVolume < serviceVolume && newVolume < 50 {
-									v.tl.trace(mode, "Send Service Volume Down DOWN")
-									setServiceVolume(-1000)
+									if newVolume < serviceVolume && newVolume < 50 {
+										v.tl.trace(mode, "Send Service Volume Down DOWN")
+										setServiceVolume(-1000)
+									}
 								}
-
 								serviceVolume = newVolume
 								volChange(50 > serviceVolume)
 							}

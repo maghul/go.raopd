@@ -163,6 +163,7 @@ func TestVolume5(t *testing.T) {
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -15
 
+	time.Sleep(100 * time.Millisecond)
 	// We should now be stable.
 	dvc <- -25 // Poke down
 	waitFor(t, "serviceVolume:-1000", resp)
@@ -187,6 +188,7 @@ func TestVolume5(t *testing.T) {
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -15
 
+	time.Sleep(100 * time.Millisecond)
 	// And stable again.
 	dvc <- -13 // Poke up
 	waitFor(t, "serviceVolume:1000", resp)
@@ -211,6 +213,7 @@ func TestVolume6(t *testing.T) {
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -15
 
+	time.Sleep(100 * time.Millisecond)
 	// We should now be stable.
 	dvc <- -25 // Poke down
 	waitFor(t, "serviceVolume:-1000", resp)
@@ -242,6 +245,7 @@ func TestVolume6(t *testing.T) {
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -15
 
+	time.Sleep(100 * time.Millisecond)
 	// And stable again.
 	dvc <- -13 // Poke up
 	waitFor(t, "serviceVolume:1000", resp)
