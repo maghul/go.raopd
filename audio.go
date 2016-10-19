@@ -51,9 +51,6 @@ func (r *audioStreams) newStream(w io.Writer, s chan bool) {
 }
 
 func (r *audioStreams) handleAudioPacket(pkt *rtpPacket) {
-	if pkt.sn%100 == 0 {
-		audiolog.Debug.Println("Received audio packet ", pkt.sn)
-	}
 	r.mode = cipher.NewCBCDecrypter(r.aeskey, r.aesiv)
 
 	ciphertext := pkt.content[12:]
