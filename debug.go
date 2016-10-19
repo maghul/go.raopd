@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 )
@@ -56,6 +57,15 @@ func getLoggerImplementation(name string, logger interface{}) (iLogger, error) {
 			li.Println(b...)
 		}
 		return lgi, nil
+	}
+
+	if iowri, ok := logger.(int); ok {
+		switch iowri {
+		case 1:
+			logger = os.Stdout
+		case 2:
+			logger = os.Stderr
+		}
 	}
 
 	if iowr, ok := logger.(io.Writer); ok {
