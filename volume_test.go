@@ -49,19 +49,37 @@ func makeVolumeTest(absoluteMode bool) (chan bool, chan float32, chan float32, c
 	return v.absoluteModeChan, v.deviceVolumeChan, v.serviceVolumeChan, resp
 }
 
+func TestVolumeDec2Ios(t *testing.T) {
+	assert.Equal(t, float32(-30.0), dec2iosVolume(0))
+	assert.Equal(t, float32(-22.5), dec2iosVolume(25))
+	assert.Equal(t, float32(-15.0), dec2iosVolume(50))
+	assert.Equal(t, float32(-7.5), dec2iosVolume(75))
+	assert.Equal(t, float32(0.0), dec2iosVolume(100))
+}
+
+func TestVolumeIos2Dec(t *testing.T) {
+	assert.Equal(t, float32(0), ios2decVolume(-40))
+	assert.Equal(t, float32(0), ios2decVolume(-30))
+	assert.Equal(t, float32(25), ios2decVolume(-22.5))
+	assert.Equal(t, float32(50), ios2decVolume(-15))
+	assert.Equal(t, float32(75), ios2decVolume(-7.5))
+	assert.Equal(t, float32(100), ios2decVolume(0))
+	assert.Equal(t, float32(100), ios2decVolume(10))
+}
+
 func TestVolume1(t *testing.T) {
 	// Volume in normal mode, driven from service
 	_, dvc, svc, resp := makeVolumeTest(true)
 	dvc <- -9
-	waitFor(t, "serviceVolume:-9", resp)
-	svc <- -12
+	waitFor(t, "serviceVolume:70", resp)
+	svc <- 60
 	waitFor(t, "cmd:volumedown", resp)
 	dvc <- -10
 	waitFor(t, "cmd:volumedown", resp)
 	dvc <- -11
 	waitFor(t, "cmd:volumedown", resp)
 	dvc <- -12
-	waitFor(t, "serviceVolume:-12", resp)
+	waitFor(t, "serviceVolume:60", resp)
 	doneWaiting(t, resp)
 }
 
@@ -69,13 +87,13 @@ func TestVolume2(t *testing.T) {
 	// Volume in normal mode, driven from device.
 	_, dvc, _, resp := makeVolumeTest(true)
 	dvc <- -10
-	waitFor(t, "serviceVolume:-10", resp)
+	waitFor(t, "serviceVolume:66.66667", resp)
 	dvc <- -11
-	waitFor(t, "serviceVolume:-11", resp)
+	waitFor(t, "serviceVolume:63.333332", resp)
 	dvc <- -12
-	waitFor(t, "serviceVolume:-12", resp)
+	waitFor(t, "serviceVolume:60", resp)
 	dvc <- -13
-	waitFor(t, "serviceVolume:-13", resp)
+	waitFor(t, "serviceVolume:56.666668", resp)
 	doneWaiting(t, resp)
 }
 
@@ -122,7 +140,7 @@ func TestVolume4(t *testing.T) {
 	// Volume in relative mode, driven from service.
 	_, dvc, svc, resp := makeVolumeTest(false)
 	dvc <- -18
-	svc <- -17
+	svc <- 77
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -18
 	waitFor(t, "cmd:volumeup", resp)
@@ -135,7 +153,7 @@ func TestVolume5(t *testing.T) {
 	// Volume in relative mode, driven from device.
 	_, dvc, svc, resp := makeVolumeTest(false)
 	dvc <- -18
-	svc <- -15
+	svc <- 77
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -18
 	waitFor(t, "cmd:volumeup", resp)
@@ -145,7 +163,6 @@ func TestVolume5(t *testing.T) {
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -15
 
-	time.Sleep(100 * time.Millisecond)
 	// We should now be stable.
 	dvc <- -25 // Poke down
 	waitFor(t, "serviceVolume:-1000", resp)
@@ -170,7 +187,6 @@ func TestVolume5(t *testing.T) {
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -15
 
-	time.Sleep(100 * time.Millisecond)
 	// And stable again.
 	dvc <- -13 // Poke up
 	waitFor(t, "serviceVolume:1000", resp)
@@ -185,7 +201,7 @@ func TestVolume6(t *testing.T) {
 	// Volume in relative mode, driven from device.
 	_, dvc, svc, resp := makeVolumeTest(false)
 	dvc <- -18
-	svc <- -15
+	svc <- 77
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -18
 	waitFor(t, "cmd:volumeup", resp)
@@ -195,7 +211,6 @@ func TestVolume6(t *testing.T) {
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -15
 
-	time.Sleep(100 * time.Millisecond)
 	// We should now be stable.
 	dvc <- -25 // Poke down
 	waitFor(t, "serviceVolume:-1000", resp)
@@ -227,7 +242,6 @@ func TestVolume6(t *testing.T) {
 	waitFor(t, "cmd:volumeup", resp)
 	dvc <- -15
 
-	time.Sleep(100 * time.Millisecond)
 	// And stable again.
 	dvc <- -13 // Poke up
 	waitFor(t, "serviceVolume:1000", resp)

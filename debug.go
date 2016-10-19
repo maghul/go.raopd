@@ -121,6 +121,10 @@ func Debug(name string, value interface{}) error {
 		flag, _ := value.(bool)
 		debugSequenceLogFlag = flag
 		return nil
+	case name == "volumetrace":
+		flag, _ := value.(bool)
+		volumetracelog = flag
+		return nil
 	case strings.HasPrefix(name, "log.info/"):
 		return setLogger(name[9:], true, value)
 	case strings.HasPrefix(name, "log.debug/"):
