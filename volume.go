@@ -7,24 +7,9 @@ import (
 var volumelog = getLogger("raopd.volume")
 var volumetracelog bool
 
-const volumespan = 5 // +/- 5%
+const volumespan = 1.5 // +/- 5%
 
 // Handle volume changes.
-
-// Convert 0...100 to 32..0
-func dec2iosVolume(vol float32) float32 {
-	return -(30.0 * float32(100-vol)) / 100.0
-}
-
-func ios2decVolume(vol float32) float32 {
-	if vol < -30 {
-		return 0
-	}
-	if vol > 0 {
-		return 100
-	}
-	return 100 + (vol*100)/30
-}
 
 type volumeHandler struct {
 	absoluteModeChan  chan bool
@@ -83,7 +68,7 @@ func between(a, b, c float32) bool {
 }
 
 func inCenter(a float32) bool {
-	return a > 50-volumespan && a < 50+volumespan
+	return a > -15-volumespan && a < -15+volumespan
 }
 
 func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), send func(cmd string)) {
@@ -110,7 +95,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 		for {
 			select {
 			case v.deviceVolume = <-v.deviceVolumeChan:
-				serviceVolume = ios2decVolume(v.deviceVolume)
+				serviceVolume = v.deviceVolume
 				v.tl.trace(mode, "deviceVolume=", v.deviceVolume, " -->  serviceVolume=", serviceVolume)
 				break init
 			case absoluteMode = <-v.absoluteModeChan:
@@ -134,7 +119,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume
-							serviceVolume = ios2decVolume(dVolume)
+							serviceVolume = dVolume
 							v.tl.trace(mode, "deviceVolume=", v.deviceVolume, " -->  serviceVolume=", serviceVolume)
 							setServiceVolume(serviceVolume)
 
@@ -156,7 +141,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume
-							newVolume := ios2decVolume(dVolume)
+							newVolume := dVolume
 							v.tl.trace(mode, "deviceVolume=", v.deviceVolume, " -->  newVolume=", newVolume)
 							if between(newVolume, targetVolume, serviceVolume) {
 								v.tl.trace(mode, "STOP [ newVolume=", newVolume, ", targetVolume=", targetVolume, ", serviceVolume=", serviceVolume, "]")
@@ -186,7 +171,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 					v.tl.trace(mode, " Starting")
 					if !inCenter(serviceVolume) {
 						v.tl.trace(mode, "BOUNCE   deviceVolume=", v.deviceVolume, ", serviceVolume=", serviceVolume)
-						volChange(50 > serviceVolume)
+						volChange(-15 > serviceVolume)
 					}
 					mode = ":Relative: "
 					v.tl.trace(mode, " Starting")
@@ -195,10 +180,10 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume
-							newVolume := ios2decVolume(dVolume)
+							newVolume := dVolume
 							v.tl.trace(mode, "deviceVolume=", v.deviceVolume, " -->  newVolume=", newVolume)
-							if between(newVolume, 50, serviceVolume) && inCenter(newVolume) {
-								v.tl.trace(mode, "STOP [ newVolume=", newVolume, ", targetVolume=", 50, ", serviceVolume=", serviceVolume, "], inCenter=", inCenter(newVolume))
+							if between(newVolume, -15, serviceVolume) && inCenter(newVolume) {
+								v.tl.trace(mode, "STOP [ newVolume=", newVolume, ", targetVolume=", -15, ", serviceVolume=", serviceVolume, "], inCenter=", inCenter(newVolume))
 								serviceVolume = newVolume
 								centered = time.Now()
 							} else {
@@ -207,18 +192,18 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 									// Don't send volume up and down unless the volume knob
 									// centered more than 100ms ago, we do get stray volume
 									// calls after pushing the button around.
-									if newVolume > serviceVolume && newVolume > 50 {
+									if newVolume > serviceVolume && newVolume > -15 {
 										v.tl.trace(mode, "Send Service Volume UP")
 										setServiceVolume(1000)
 									}
 
-									if newVolume < serviceVolume && newVolume < 50 {
+									if newVolume < serviceVolume && newVolume < -15 {
 										v.tl.trace(mode, "Send Service Volume Down DOWN")
 										setServiceVolume(-1000)
 									}
 								}
 								serviceVolume = newVolume
-								volChange(50 > serviceVolume)
+								volChange(-15 > serviceVolume)
 							}
 
 						case <-v.serviceVolumeChan:
