@@ -1,6 +1,7 @@
 package raopd
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"errors"
@@ -15,9 +16,9 @@ import (
 var alacNotInitialized = errors.New("Alac has not been initialized")
 
 type audioStream struct {
-	audioWriter   io.Writer
-	audioWriteEnd chan bool
-	count         int
+	audioWriter io.Writer
+	ctx         context.Context
+	count       int
 }
 
 type audioStreams struct {
@@ -39,10 +40,10 @@ func (r *audioStreams) initAlac(rtpmap, fmtpstr string) error {
 	return err
 }
 
-func (r *audioStreams) newStream(w io.Writer, s chan bool) {
+func (r *audioStreams) newStream(ctx context.Context, w io.Writer) {
 	audiolog.Debug.Println("audioStreams:newStream w=", w)
 	// Sets a timeout count of 10.
-	ns := &audioStream{w, s, 10}
+	ns := &audioStream{w, ctx, 10}
 
 	r.streamsMutex.Lock()
 	defer r.streamsMutex.Unlock()
@@ -75,16 +76,24 @@ func (r *audioStreams) writeToStreams(b []byte) {
 	r.streamsMutex.Lock()
 	defer r.streamsMutex.Unlock()
 
+	jj := 0
 	for ii, as := range r.streams {
-		of := as.audioWriter
-		_, err := of.Write(b)
-		//		audiolog.Debug.Print( "WTS: of=",of, ", n=", n, ", err = ", err )
-
-		if err != nil {
-			as.audioWriteEnd <- true
-			r.streams = append(r.streams[0:ii], r.streams[ii+1:]...)
+		ctx := as.ctx
+		select {
+		case <-ctx.Done():
+			audiolog.Debug.Println("Context closed audio output ", as)
+		default:
+			of := as.audioWriter
+			_, err := of.Write(b)
+			if err != nil {
+				audiolog.Debug.Println("Closing audio output ", as, ", on error=", err)
+			} else {
+				r.streams[jj] = r.streams[ii]
+				jj++
+			}
 		}
 	}
+	r.streams = r.streams[0:jj]
 }
 
 func (a *audioStreams) rtptoms(rtp int64) (int, error) {

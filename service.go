@@ -1,6 +1,7 @@
 package raopd
 
 import (
+	"context"
 	"io"
 	"sync"
 )
@@ -176,9 +177,9 @@ func (source *Source) VolumeMode(absolute bool) {
 
 // NewAudioStream will start a new audio output stream for the source.
 // Only raw PCM with two channel
-// 16-bit depth at 44100 samples/second is currently supported.
-// The stream is sent as w and s is a channel to indicate that
-// the stream has been closed by the receiver or source.
-func (source *Source) NewAudioStream(w io.Writer, s chan bool) {
-	source.raop.newStream(w, s)
+// 16-bit depth at 44100 samples/second is currently supported. The parameter
+// ctx is a context used to close the audio output. The streamed data
+// is sent to the writer w.
+func (source *Source) NewAudioStream(ctx context.Context, w io.Writer) {
+	source.raop.newStream(ctx, w)
 }
