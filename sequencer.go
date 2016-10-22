@@ -3,6 +3,7 @@ package raopd
 import (
 	"fmt"
 	//	"os"
+	"sort"
 	"time"
 )
 
@@ -144,6 +145,10 @@ func (m *sequencer) sendReRequests(request chan rerequest) {
 				count++
 			}
 		}
+		ctl := count > 20000
+		if ctl {
+			m.printState()
+		}
 		if count > 0 {
 			switch retry {
 			case 3, 11, 23: // Send rerequest at 30ms, 110ms, and 230ms
@@ -154,6 +159,53 @@ func (m *sequencer) sendReRequests(request chan rerequest) {
 				m.remove(start, count)
 			}
 		}
+	}
+}
+
+func (s *sequencer) printState() {
+	prefix := "Sequence ReRequest fail: "
+	entries := len(s.packets)
+	s.sl.note(prefix, "low=", s.low, ", entries=", entries)
+	ia := []int{}
+
+	for ii, _ := range s.packets {
+		ia = append(ia, int(ii))
+	}
+	sort.Ints(ia)
+	for _, ii := range ia {
+		s.sl.note(prefix, "packet index = ", ii)
+	}
+
+	start := seqno(0)
+	count := seqno(0)
+	retry := 0
+	ii := s.low
+	for entries > 0 {
+		count = 0
+		for ; entries > 0; ii++ {
+			_, ok := s.packets[ii]
+			if ok {
+				entries--
+			} else {
+				start = ii
+				break
+			}
+		}
+		for ; entries > 0; ii++ {
+			_, ok := s.packets[ii]
+			if ok {
+				entries--
+				ii++
+				break
+			} else {
+				s.retries[ii]++
+				if retry > s.retries[ii] {
+					retry = s.retries[ii]
+				}
+				count++
+			}
+		}
+		s.sl.note(prefix, "start=", start, ", count=", count, ", ii=", ii)
 	}
 }
 
