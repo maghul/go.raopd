@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/sha1"
-	"emh/logger"
 	"encoding/base64"
 	"encoding/hex"
 	"net"
@@ -16,7 +15,7 @@ type info struct {
 	key *rsa.PrivateKey // Move all code related to this here...
 }
 
-var authlog = logger.GetLogger("raopd.auth")
+var authlog = getLogger("raopd.auth")
 
 func makeInfo(keyfilename string) (*info, error) {
 	i := &info{}

@@ -2,13 +2,12 @@ package raopd
 
 import (
 	"bytes"
-	"emh/logger"
 	"encoding/hex"
 	"fmt"
 	"net"
 )
 
-var rtplog = logger.GetLogger("raopd.rtp")
+var rtplog = getLogger("raopd.rtp")
 
 const max_rtp_packet_size = 1800
 

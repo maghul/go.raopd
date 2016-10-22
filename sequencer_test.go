@@ -1,7 +1,6 @@
 package raopd
 
 import (
-	"emh/logger"
 	"fmt"
 	"testing"
 	"time"

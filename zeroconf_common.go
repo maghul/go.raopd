@@ -2,7 +2,6 @@ package raopd
 
 import (
 	"bytes"
-	"emh/logger"
 	"errors"
 	"fmt"
 	"net"
@@ -12,7 +11,7 @@ import (
 	"strings"
 )
 
-var zconflog = logger.GetLogger("raopd.zeroconf")
+var zconflog = getLogger("raopd.zeroconf")
 
 type zeroconfRecord struct {
 	serviceName   string

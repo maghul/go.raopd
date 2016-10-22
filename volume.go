@@ -1,11 +1,6 @@
 package raopd
 
-import (
-	"emh/logger"
-	"fmt"
-)
-
-var volumelog = logger.GetLogger("raopd.volume")
+var volumelog = getLogger("raopd.volume")
 
 const volumespan = 5 // +/- 5%
 

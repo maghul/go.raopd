@@ -1,7 +1,6 @@
 package raopd
 
 import (
-	"emh/logger"
 	"errors"
 	"fmt"
 	"net"
@@ -22,7 +21,7 @@ type dacp struct {
 	connectedName string
 }
 
-var dacplog = logger.GetLogger("raopd.dacp")
+var dacplog = getLogger("raopd.dacp")
 
 func newDacp(sink Sink) *dacp {
 	d := &dacp{}

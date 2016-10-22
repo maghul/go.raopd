@@ -2,7 +2,6 @@ package raopd
 
 import (
 	"bufio"
-	"emh/logger"
 	"fmt"
 	"io"
 	"net"
@@ -36,7 +35,7 @@ type raop struct {
 	sequencer *sequencer
 }
 
-var raoplog = logger.GetLogger("raopd.raop")
+var raoplog = getLogger("raopd.raop")
 
 func (r *raop) String() string {
 	return fmt.Sprint("RAOP: hw=", r.hwaddr)

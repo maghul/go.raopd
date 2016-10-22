@@ -137,8 +137,8 @@ func runResolver(requestChan chan reqFunc) {
 	requests := make(map[zeroconfResolveKey]*zeroconfResolveRequest)
 	dconn, err := dbus.SystemBus()
 	if err != nil {
-		zconflog.Info().Println(os.Stderr, "Error getting DBUS: ", err)
-		os.Exit(-1)	
+		zconflog.Info.Println("Error getting DBUS: ", err)
+		os.Exit(-1)
 	}
 
 	sigchan := make(chan *dbus.Signal, 32)
@@ -207,7 +207,7 @@ func (bi *zeroconfAvahiImplementation) close(req *zeroconfResolveRequest) {
 			c := req.dbusObject().Call("org.freedesktop.Avahi.ServiceResolver.Free", 0)
 			err := c.Err
 			if err != nil {
-				zconflog.Info.Println(os.Stderr, "Error closing ResolveRequest: ", err)
+				zconflog.Info.Println("Error closing ResolveRequest: ", err)
 			}
 		} else {
 			zconflog.Info.Println("The request ", req.zeroconfResolveKey, " doesn't exist!")

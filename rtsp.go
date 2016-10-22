@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/aes"
-	"emh/logger"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,7 +15,7 @@ import (
 	"strings"
 )
 
-var rtsplog = logger.GetLogger("raopd.rtsp")
+var rtsplog = getLogger("raopd.rtsp")
 
 /* It would have been nice to use the HTTP package since it is 99%
  * http. But the remaining 1% is important and impossible to tack on

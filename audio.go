@@ -3,7 +3,6 @@ package raopd
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"emh/logger"
 	"errors"
 	"io"
 	"os"
@@ -32,7 +31,7 @@ type audioStreams struct {
 	streams      []*audioStream
 }
 
-var audiolog = logger.GetLogger("raopd.audio")
+var audiolog = getLogger("raopd.audio")
 
 func (r *audioStreams) initAlac(rtpmap, fmtpstr string) error {
 	var err error

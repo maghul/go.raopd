@@ -3,7 +3,6 @@ package raopd
 import (
 	"bufio"
 	"bytes"
-	"emh/logger"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -16,7 +15,7 @@ import (
 // This is the DMAP tag handler. It will read the binary encoded DMAP metadata
 // and decode it.
 
-var dmaplog = logger.GetLogger("raopd.dmap")
+var dmaplog = getLogger("raopd.dmap")
 
 type dmap struct {
 	data []byte

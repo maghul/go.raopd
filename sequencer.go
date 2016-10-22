@@ -1,13 +1,12 @@
 package raopd
 
 import (
-	"emh/logger"
 	"fmt"
 	//	"os"
 	"time"
 )
 
-var seqlog = logger.GetLogger("raopd.sequencer")
+var seqlog = getLogger("raopd.sequencer")
 var debugSequenceLogFlag bool
 
 type sequencer struct {

@@ -1,9 +1,7 @@
 package raopd
 
 import (
-	"fmt"
 	"io"
-	"os"
 	"sync"
 )
 

@@ -1,7 +1,6 @@
 package raopd
 
 import (
-	"emh/logger"
 	"errors"
 	"fmt"
 	"net"
@@ -9,7 +8,7 @@ import (
 	"strings"
 )
 
-var netlog = logger.GetLogger("raopd.net")
+var netlog = getLogger("raopd.net")
 
 func getPortsFromTransport(transport string) (control int, timing int, err error) {
 	ts := strings.Split(transport, ";")
