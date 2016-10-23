@@ -1,6 +1,7 @@
 package raopd
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -16,6 +17,8 @@ type volumeHandler struct {
 	deviceVolumeChan  chan float32
 	serviceVolumeChan chan float32
 	deviceVolume      float32
+
+	poke bool
 
 	tl tracelog
 }
@@ -45,7 +48,7 @@ func (v *volumeHandler) SetServiceVolume(vol float32) {
 	v.deviceVolumeChan <- vol
 }
 
-func newVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), send func(cmd string)) *volumeHandler {
+func newVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), send func(cmd string) error) *volumeHandler {
 	v := &volumeHandler{}
 	v.absoluteModeChan = make(chan bool)
 	v.serviceVolumeChan = make(chan float32, 8)
@@ -71,20 +74,34 @@ func inCenter(a float32) bool {
 	return a > -15-volumespan && a < -15+volumespan
 }
 
-func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), send func(cmd string)) {
+func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), send func(cmd string) error) {
 
 	serviceVolume := float32(0)
 	targetVolume := float32(0)
 
-	volChange := func(up bool) {
-		var cmd string
-		if up {
-			cmd = "volumeup"
-		} else {
-			cmd = "volumedown"
+	volChange := func(target, current float32) {
+		v.tl.trace("poke=", v.poke)
+		if !v.poke {
+			dv := fmt.Sprintf("setproperty?dmcp.device-volume=%4.6f", target)
+			v.tl.trace("SEND: ", dv)
+			err := send(dv)
+			if err != nil {
+				v.poke = true
+			} else {
+				return
+			}
 		}
-		v.tl.trace("SEND: ", cmd)
-		send(cmd)
+		delta := current - target
+		switch {
+		case delta > 0:
+			v.tl.trace("SEND: volumedown")
+			send("volumedown")
+		case delta < -0:
+			v.tl.trace("SEND: volumeup")
+			send("volumeup")
+		default:
+			// Do nothing
+		}
 	}
 
 	mode := "Initial"
@@ -125,7 +142,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 
 						case targetVolume = <-v.serviceVolumeChan:
 							v.tl.trace(mode, "targetVolume=", targetVolume)
-							volChange(targetVolume > serviceVolume)
+							volChange(targetVolume, serviceVolume)
 							break normal
 
 						case absoluteMode = <-v.absoluteModeChan:
@@ -153,11 +170,11 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 
 							v.tl.trace(mode, "CONTINUE [ newVolume=", newVolume, ", targetVolume=", targetVolume, ", serviceVolume=", serviceVolume, "]")
 							serviceVolume = newVolume
-							volChange(targetVolume > serviceVolume)
+							volChange(targetVolume, serviceVolume)
 
 						case targetVolume = <-v.serviceVolumeChan:
 							v.tl.trace(mode, "targetVolume=", targetVolume)
-							volChange(targetVolume > serviceVolume)
+							volChange(targetVolume, serviceVolume)
 
 						case absoluteMode = <-v.absoluteModeChan:
 							v.tl.trace(mode, "switching mode: absoluteMode=", absoluteMode)
@@ -171,7 +188,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 					v.tl.trace(mode, " Starting")
 					if !inCenter(serviceVolume) {
 						v.tl.trace(mode, "BOUNCE   deviceVolume=", v.deviceVolume, ", serviceVolume=", serviceVolume)
-						volChange(-15 > serviceVolume)
+						volChange(-15, serviceVolume)
 					}
 					mode = ":Relative: "
 					v.tl.trace(mode, " Starting")
@@ -203,7 +220,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 									}
 								}
 								serviceVolume = newVolume
-								volChange(-15 > serviceVolume)
+								volChange(-15, serviceVolume)
 							}
 
 						case <-v.serviceVolumeChan:

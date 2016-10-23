@@ -94,16 +94,23 @@ playresume 	play after fast forward or rewind
 shuffle_songs 	shuffle playlist
 volumedown 	turn audio volume down
 volumeup 	turn audio volume up
+setproperty&dmcp.device-volume=<float>  Sets absolute volume. Not sure if this is
+                                     is supported in all devices.
 */
-func (d *dacp) tx(cmd string) {
+func (d *dacp) tx(cmd string) error {
+	errc := make(chan error)
+
 	d.crc <- func() error {
-		dacplog.Debug.Println("Sending Command", cmd)
+		defer close(errc)
+		dacplog.Debug.Println("Sending Command ", cmd)
 		url, err := d.getCommandUrl(cmd)
 		if err != nil {
+			errc <- err
 			return err
 		}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
+			errc <- err
 			return err
 		}
 		req.Header.Add("Active-Remote", d.ar)
@@ -111,11 +118,17 @@ func (d *dacp) tx(cmd string) {
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
 			if resp.StatusCode != 200 {
-				return errors.New(fmt.Sprintf("error in DACP response: '%s'", resp.Status))
+				err = errors.New(fmt.Sprintf("error in DACP response: '%s'", resp.Status))
+				errc <- err
+				return nil
 			}
 		}
+		errc <- err
 		return err
 	}
+	err := <-errc
+	dacplog.Debug.Println("tx err=", err)
+	return err
 }
 
 func (d *dacp) getCommandUrl(cmd string) (string, error) {
@@ -191,7 +204,7 @@ func (d *dacp) runDacp() {
 
 		}
 		if err != nil {
-			dacplog.Info.Println(err)
+			dacplog.Info.Println("Error in DACP request: ", err)
 			d.addr4 = nil // Should we try to ask again?
 			d.addr6 = nil // Should we try to ask again?
 		}

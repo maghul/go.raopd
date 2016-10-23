@@ -32,8 +32,9 @@ func doneWaiting(t *testing.T, results chan string) {
 func makeVolumeTest(absoluteMode bool) (chan bool, chan float32, chan float32, chan string) {
 	volumetracelog = true
 	resp := make(chan string, 12)
-	send := func(cmd string) {
+	send := func(cmd string) error {
 		resp <- fmt.Sprint("cmd:", cmd)
+		return nil
 	}
 	setServiceVolume := func(volume float32) {
 		resp <- fmt.Sprint("serviceVolume:", volume)
@@ -44,6 +45,7 @@ func makeVolumeTest(absoluteMode bool) (chan bool, chan float32, chan float32, c
 	info.Name = "testvolume"
 	v := newVolumeHandler(info, setServiceVolume, send)
 	v.absoluteModeChan <- absoluteMode
+	v.poke = true
 
 	time.Sleep(time.Millisecond)
 	return v.absoluteModeChan, v.deviceVolumeChan, v.serviceVolumeChan, resp
