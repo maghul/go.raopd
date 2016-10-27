@@ -20,7 +20,8 @@ type volumeHandler struct {
 
 	poke bool
 
-	tl tracelog
+	info *SinkInfo
+	tl   tracelog
 }
 
 func (v *volumeHandler) VolumeMode(absolute bool) {
@@ -55,8 +56,9 @@ func newVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), sen
 	v.deviceVolumeChan = make(chan float32, 8)
 
 	v.startVolumeHandler(info, setServiceVolume, send)
+	v.info = info
 	if volumetracelog {
-		v.tl.initTraceLog(info.Name, "volumetrace", true)
+		v.tl.initTraceLog(v.info.Name, "volumetrace", true)
 	}
 	return v
 }
@@ -72,6 +74,19 @@ func between(a, b, c float32) bool {
 
 func inCenter(a float32) bool {
 	return a > -15-volumespan && a < -15+volumespan
+}
+
+func (v *volumeHandler) checkTrace() {
+	if v.tl.traceing == volumetracelog {
+		return
+	}
+
+	if v.tl.traceing {
+		v.tl.closeTraceLog()
+	} else {
+		// Open a new trace
+		v.tl.initTraceLog(v.info.Name, "volumetrace", true)
+	}
 }
 
 func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func(volume float32), send func(cmd string) error) {
@@ -133,6 +148,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 					v.tl.trace(mode, " Starting")
 				normal:
 					for {
+						v.checkTrace()
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume
@@ -155,6 +171,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 					v.tl.trace(mode, " Starting")
 				finder:
 					for {
+						v.checkTrace()
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume
@@ -194,6 +211,7 @@ func (v *volumeHandler) startVolumeHandler(info *SinkInfo, setServiceVolume func
 					v.tl.trace(mode, " Starting")
 					centered := time.Now()
 					for {
+						v.checkTrace()
 						select {
 						case dVolume := <-v.deviceVolumeChan:
 							v.deviceVolume = dVolume

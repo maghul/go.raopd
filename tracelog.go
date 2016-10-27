@@ -15,7 +15,8 @@ type logentry struct {
 // Capture packet numbers, timestamps and resends for later analysis
 type tracelog struct {
 	traceing bool
-	wr       io.Writer
+	wr       io.WriteCloser
+	path     string
 	lec      chan *logentry
 	start    time.Time
 }
@@ -39,11 +40,11 @@ func openPath(path string, multiple bool) (string, *os.File, error) {
 }
 
 func (tl *tracelog) initTraceLog(name, suffix string, multiple bool) {
-	path := fmt.Sprint("/tmp/", name, ".", suffix)
+	tl.path = fmt.Sprint("/tmp/", name, ".", suffix)
 	var err error
-	path, tl.wr, err = openPath(path, multiple)
+	tl.path, tl.wr, err = openPath(tl.path, multiple)
 	if err != nil {
-		seqlog.Info.Println("Could not open trace log '", path, "'")
+		seqlog.Info.Println("Could not open trace log '", tl.path, "'")
 		return
 	}
 	tl.lec = make(chan *logentry, 128)
@@ -57,8 +58,19 @@ func (tl *tracelog) initTraceLog(name, suffix string, multiple bool) {
 			le.lf(tl.wr)
 		}
 	}()
-	seqlog.Info.Println("Opened trace log '", path, "'")
+	seqlog.Info.Println("Opened trace log '", tl.path, "'")
 	tl.traceing = true
+}
+
+func (tl *tracelog) closeTraceLog() {
+	tl.traceing = false
+	if tl.wr == nil {
+		return
+	}
+	err := tl.wr.Close()
+	if err != nil {
+		seqlog.Info.Println("Error closing trace log for '", tl.path, "', err=", err)
+	}
 }
 
 func (tl *tracelog) timestamp(wr io.Writer, tm time.Time) {
