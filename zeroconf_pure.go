@@ -6,13 +6,10 @@ package raopd
 
 import (
 	"context"
-	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/maghul/go.dnssd"
-	"github.com/maghul/go.slf"
 	"github.com/miekg/dns"
 )
 
@@ -28,18 +25,19 @@ func init() {
 		func() zeroconfImplementation {
 			return &zeroconfPureImplementation{}
 		})
-
-	raoplogg := func(data ...interface{}) {
-		s := fmt.Sprint(data)
-		if strings.Contains(s, "raop") {
-			zconflog.Debug.Println("QUERIES", data)
+	/*
+		raoplogg := func(data ...interface{}) {
+			s := fmt.Sprint(data)
+			if strings.Contains(s, "raop") {
+				zconflog.Debug.Println("QUERIES", data)
+			}
 		}
-	}
-	slf.GetLogger("q").SetOutputLogger(raoplogg)
-	logg := func(data ...interface{}) {
-		zconflog.Debug.Println(data)
-	}
-	slf.GetLogger("dnssd").SetOutputLogger(logg)
+		slf.GetLogger("q").SetOutputLogger(raoplogg)
+		logg := func(data ...interface{}) {
+			zconflog.Debug.Println(data)
+		}
+		slf.GetLogger("dnssd").SetOutputLogger(logg)
+	*/
 }
 
 func (bi *zeroconfPureImplementation) fqdn() string {
