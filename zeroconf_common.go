@@ -191,11 +191,11 @@ func reworkTxt([]string) map[string]string {
 	return nil
 }
 
-func Unpublish(zr *zeroconfRecord) error {
+func unpublish(zr *zeroconfRecord) error {
 	return zeroconf().Unpublish(zr)
 }
 
-func Publish(zr *zeroconfRecord) error {
+func publish(zr *zeroconfRecord) error {
 	zconflog.Debug.Println("Trying to publish ", zr)
 
 	if _zeroconf == nil {

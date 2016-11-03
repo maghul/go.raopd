@@ -76,7 +76,7 @@ func (sc *SinkCollection) Register(sink Sink) (*Source, error) {
 	source.raop.startRtspProcess()
 
 	source.raop.br = makeAPBonjourRecord(&source.raop)
-	err := Publish(source.raop.br)
+	err := publish(source.raop.br)
 	if err != nil {
 		source.raop.close()
 		return nil, err

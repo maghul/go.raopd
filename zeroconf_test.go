@@ -14,7 +14,7 @@ func NoTestZeroconfBrowse(t *testing.T) {
 	br.serviceDomain = "local" // sdomain
 	br.serviceHost = "flurer"
 	br.Port = 7777
-	Publish(br)
+	publish(br)
 
 	assert.NotNil(t, br)
 	time.Sleep(4 * time.Second)
@@ -28,7 +28,7 @@ func NoTestZeroconfBrowse(t *testing.T) {
 	assert.NotNil(t, addr)
 
 	time.Sleep(14 * time.Second)
-	Unpublish(br)
+	unpublish(br)
 	time.Sleep(20 * time.Second)
 	zeroconf().zeroconfCleanUp()
 
