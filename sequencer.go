@@ -33,78 +33,78 @@ func (rr *rerequest) String() string {
 }
 
 // Restart the sequencer. Empty all internal caches
-func (s sequencer) flush() {
+func (s *sequencer) flush() {
 	s.control <- 0
 }
 
 // Close the sequencer completely.
-func (s sequencer) close() {
+func (s *sequencer) close() {
 	s.control <- 1
 }
 
 // Internal functions
 
 // Sequencer is in recovery mode.
-func (m *sequencer) inRecovery() bool {
-	return len(m.packets) > 0
+func (s *sequencer) inRecovery() bool {
+	return len(s.packets) > 0
 }
 
 // Internal function to clear all internal caches and
 // start over. Called by sequence go-routine when flush has been called.
-func (m *sequencer) restartSequencer() {
-	m.lowd = false
-	m.low = 0
-	m.retries = make(map[seqno]int)
-	m.packets = make(map[seqno]*rtpPacket)
+func (s *sequencer) restartSequencer() {
+	s.lowd = false
+	s.low = 0
+	s.retries = make(map[seqno]int)
+	s.packets = make(map[seqno]*rtpPacket)
 }
 
 // flush packet cache from seqno and onwards and set low to
 // first gap in the cache.
-func (m *sequencer) flushCached(sn seqno, outf func(pkt *rtpPacket)) {
+func (s *sequencer) flushCached(sn seqno, outf func(pkt *rtpPacket)) {
 	sn--
 	for {
 		sn++
-		pkt, ok := m.packets[sn]
+		pkt, ok := s.packets[sn]
 		if ok {
-			m.sl.outputPacket(pkt)
+			s.sl.outputPacket(pkt)
 			outf(pkt)
-			delete(m.packets, sn)
+			delete(s.packets, sn)
 		} else {
 			break
 		}
 	}
-	m.low = sn
+	s.low = sn
 }
 
 // handle an incoming packet.
 // If in sequence then just output it
 // If too new (i.e. a gap exists) cache it.
 // If too old just drop it.
-func (m *sequencer) handle(pkt *rtpPacket, outf func(pkt *rtpPacket)) {
+func (s *sequencer) handle(pkt *rtpPacket, outf func(pkt *rtpPacket)) {
 	sn := pkt.sn
 
-	if !m.lowd {
+	if !s.lowd {
 		if pkt.recovery {
 			// Ignore recovery packets if the sequencer has been restarted
-			m.sl.inputPacket(pkt, "SEQUENCER RESTART")
+			s.sl.inputPacket(pkt, "SEQUENCER RESTART")
 			return
 		} else {
-			m.lowd = true
-			m.low = sn
-			m.sl.note(" sequencer::handle: Initial seqno=", sn)
+			s.lowd = true
+			s.low = sn
+			s.sl.note(" sequencer::handle: Initial seqno=", sn)
 		}
 	}
-	delete(m.retries, sn)
-	if m.low == sn {
-		m.sl.inputPacket(pkt, "")
-		m.sl.outputPacket(pkt)
+	delete(s.retries, sn)
+	if s.low == sn {
+		s.sl.inputPacket(pkt, "")
+		s.sl.outputPacket(pkt)
 		outf(pkt)
-		m.flushCached(sn+1, outf)
-	} else if seqnoDelta(sn, m.low) < 0 {
-		m.sl.inputPacket(pkt, "OLD DISCARDED")
+		s.flushCached(sn+1, outf)
+	} else if seqnoDelta(sn, s.low) < 0 {
+		s.sl.inputPacket(pkt, "OLD DISCARDED")
 	} else {
-		m.sl.inputPacket(pkt, "RECOVER")
-		m.packets[sn] = pkt
+		s.sl.inputPacket(pkt, "RECOVER")
+		s.packets[sn] = pkt
 	}
 }
 
@@ -113,17 +113,17 @@ func (m *sequencer) handle(pkt *rtpPacket, outf func(pkt *rtpPacket)) {
 // 10, 40 or 90 ms for resends or 150ms for delete.
 // When 150ms has been reached for a gap it will just be skipped and
 // deleted from the sequence cache
-func (m *sequencer) sendReRequests(request chan rerequest) {
-	entries := len(m.packets)
+func (s *sequencer) sendReRequests(request chan rerequest) {
+	entries := len(s.packets)
 	start := seqno(0)
 	count := seqno(0)
 	retry := 0
-	ii := m.low
+	ii := s.low
 	for entries > 0 {
 		retry = 100000
 		count = 0
 		for ; entries > 0; ii++ {
-			_, ok := m.packets[ii]
+			_, ok := s.packets[ii]
 			if ok {
 				entries--
 			} else {
@@ -132,31 +132,31 @@ func (m *sequencer) sendReRequests(request chan rerequest) {
 			}
 		}
 		for ; entries > 0; ii++ {
-			_, ok := m.packets[ii]
+			_, ok := s.packets[ii]
 			if ok {
 				entries--
 				ii++
 				break
 			} else {
-				m.retries[ii]++
-				if retry > m.retries[ii] {
-					retry = m.retries[ii]
+				s.retries[ii]++
+				if retry > s.retries[ii] {
+					retry = s.retries[ii]
 				}
 				count++
 			}
 		}
 		ctl := count > 20000
 		if ctl {
-			m.printState()
+			s.printState()
 		}
 		if count > 0 {
 			switch retry {
 			case 3, 11, 23: // Send rerequest at 30ms, 110ms, and 230ms
 				rr := &rerequest{start, count}
-				m.sl.reRequest(rr, retry)
+				s.sl.reRequest(rr, retry)
 				request <- *rr
 			case 37: // Well I don't think we'll get any packets after 370 ms
-				m.remove(start, count)
+				s.remove(start, count)
 			}
 		}
 	}
@@ -211,27 +211,24 @@ func (s *sequencer) printState() {
 
 // Remove all retries and packets starting with start and count entries
 // low will be set to the new start
-func (m *sequencer) remove(start, count seqno) {
-	m.sl.removePackets(start, count)
+func (s *sequencer) remove(start, count seqno) {
+	s.sl.removePackets(start, count)
 	for ii := count; ii > 0; ii-- {
-		delete(m.packets, start)
-		delete(m.retries, start)
+		delete(s.packets, start)
+		delete(s.retries, start)
 		start++
 	}
-	m.low = start
+	s.low = start
 }
 
 // Start a sequence in a goroutine.
 func startSequencer(ref string, data chan *rtpPacket, outf func(pkt *rtpPacket), request chan rerequest) *sequencer {
 
-	m := &sequencer{}
-	m.control = make(chan int, 0)
-	m.restartSequencer()
-	m.ref = ref
-
-	if debugSequenceLogFlag {
-		m.sl = makeSequenceLog(ref)
-	}
+	s := &sequencer{}
+	s.control = make(chan int, 0)
+	s.restartSequencer()
+	s.ref = ref
+	s.sl = &sequencelog{}
 
 	timeout := time.Duration(10 * time.Millisecond) // 10 mS
 	timer := time.NewTimer(timeout)
@@ -242,26 +239,32 @@ func startSequencer(ref string, data chan *rtpPacket, outf func(pkt *rtpPacket),
 	normal:
 		for {
 			// Normal operation
-			for !m.inRecovery() {
+			for !s.inRecovery() {
+				if debugSequenceLogFlag != s.sl.traceing {
+					s.modifyTrace()
+				}
 				select {
 				case pkt := <-data:
-					m.handle(pkt, outf)
-				case cmd = <-m.control:
+					s.handle(pkt, outf)
+				case cmd = <-s.control:
 					goto command
 				}
 			}
 
 			// Recovery
-			for m.inRecovery() {
+			for s.inRecovery() {
+				if debugSequenceLogFlag != s.sl.traceing {
+					s.modifyTrace()
+				}
 				timer.Reset(timeout)
 				select {
 				case pkt := <-data:
-					m.handle(pkt, outf)
-				case cmd = <-m.control:
+					s.handle(pkt, outf)
+				case cmd = <-s.control:
 					goto command
 				case <-timer.C:
-					m.sendReRequests(request)
-					m.flushCached(m.low, outf)
+					s.sendReRequests(request)
+					s.flushCached(s.low, outf)
 
 				}
 			}
@@ -270,17 +273,26 @@ func startSequencer(ref string, data chan *rtpPacket, outf func(pkt *rtpPacket),
 		command:
 			switch cmd {
 			case 0:
-				m.sl.note("Restarting Sequencer")
-				m.restartSequencer()
+				s.sl.note("Restarting Sequencer")
+				s.restartSequencer()
 			case 1:
-				m.sl.note("Shutting down Sequencer")
+				s.sl.note("Shutting down Sequencer")
 				return
 			}
 
 		}
 	}()
 
-	return m
+	return s
+}
+
+func (s *sequencer) modifyTrace() {
+	if s.sl == nil || !s.sl.traceing {
+		// Open a new trace
+		s.sl.initTraceLog(s.ref, "seqnolog", false)
+	} else {
+		s.sl.closeTraceLog()
+	}
 }
 
 func debugSequencer(flag bool) {

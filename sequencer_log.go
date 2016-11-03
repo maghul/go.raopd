@@ -10,12 +10,6 @@ type sequencelog struct {
 	all bool // Set to true to log normal packets too.
 }
 
-func makeSequenceLog(name string) *sequencelog {
-	sl := &sequencelog{}
-	sl.initTraceLog(name, "seqnolog", false)
-	return sl
-}
-
 func (sl *sequencelog) inputPacket(pkt *rtpPacket, state string) {
 	if sl == nil {
 		return
