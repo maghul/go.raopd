@@ -58,7 +58,7 @@ func (tc *testClient) Closed() {
 }
 
 func (tc *testClient) Connected(name string) {
-	rtsplog.Debug.Println("TEST CLIENT:", "Closed...")
+	rtsplog.Debug.Println("TEST CLIENT:", "Connected to ", name)
 }
 
 func (tc *testClient) AudioWriter() io.Writer {
