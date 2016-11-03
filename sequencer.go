@@ -282,3 +282,7 @@ func startSequencer(ref string, data chan *rtpPacket, outf func(pkt *rtpPacket),
 
 	return m
 }
+
+func debugSequencer(flag bool) {
+	debugSequenceLogFlag = flag
+}

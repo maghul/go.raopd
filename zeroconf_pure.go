@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/maghul/go.dnssd"
+	"github.com/maghul/go.slf"
 	"github.com/miekg/dns"
 )
 
@@ -34,12 +35,11 @@ func init() {
 			zconflog.Debug.Println("QUERIES", data)
 		}
 	}
-	dnssd.SetLog("q", raoplogg)
+	slf.GetLogger("q").SetOutputLogger(raoplogg)
 	logg := func(data ...interface{}) {
 		zconflog.Debug.Println(data)
 	}
-	dnssd.SetLog("dnssd", logg)
-
+	slf.GetLogger("dnssd").SetOutputLogger(logg)
 }
 
 func (bi *zeroconfPureImplementation) fqdn() string {
