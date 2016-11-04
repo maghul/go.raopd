@@ -15,7 +15,7 @@ type info struct {
 	key *rsa.PrivateKey // Move all code related to this here...
 }
 
-var authlog = getLogger("raopd.auth")
+var authlog = getLogger("raopd.auth", "RAOP Authentication Data")
 
 func makeInfo(keyfilename string) (*info, error) {
 	i := &info{}

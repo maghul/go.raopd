@@ -21,7 +21,7 @@ type dacp struct {
 	connectedName string
 }
 
-var dacplog = getLogger("raopd.dacp")
+var dacplog = getLogger("raopd.dacp", "DACP Remote Control")
 
 func newDacp(sink Sink) *dacp {
 	d := &dacp{}

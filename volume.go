@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-var volumelog = getLogger("raopd.volume")
+var volumelog = getLogger("raopd.volume", "Volume Control")
 var volumetracelog bool
 
 const volumespan = 1.5 // +/- 5%

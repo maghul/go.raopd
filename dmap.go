@@ -15,7 +15,7 @@ import (
 // This is the DMAP tag handler. It will read the binary encoded DMAP metadata
 // and decode it.
 
-var dmaplog = getLogger("raopd.dmap")
+var dmaplog = getLogger("raopd.dmap", "Digital Media Access Protocol")
 
 type dmap struct {
 	data []byte

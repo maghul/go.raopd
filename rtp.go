@@ -7,7 +7,7 @@ import (
 	"net"
 )
 
-var rtplog = getLogger("raopd.rtp")
+var rtplog = getLogger("raopd.rtp", "RTP Real Time Protocol")
 
 const max_rtp_packet_size = 1800
 

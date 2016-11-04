@@ -35,7 +35,7 @@ type raop struct {
 	sequencer *sequencer
 }
 
-var raoplog = getLogger("raopd.raop")
+var raoplog = getLogger("raopd.raop", "Remote Audio Output Protocol")
 
 func (r *raop) String() string {
 	return fmt.Sprint("RAOP: hw=", r.hwaddr)

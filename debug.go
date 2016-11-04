@@ -29,9 +29,10 @@ func Debug(name string, value interface{}) error {
 	return errors.New(fmt.Sprint("Debug name '", name, "' is unknown"))
 }
 
-func getLogger(name string) *slf.Logger {
+func getLogger(name, description string) *slf.Logger {
 	l := slf.GetLogger(name)
 	p := slf.GetLogger("raopd")
 	l.SetParent(p)
+	l.SetDescription(description)
 	return l
 }

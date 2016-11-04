@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-var rtsplog = getLogger("raopd.rtsp")
+var rtsplog = getLogger("raopd.rtsp", "Real Time Session Protocol")
 
 /* It would have been nice to use the HTTP package since it is 99%
  * http. But the remaining 1% is important and impossible to tack on

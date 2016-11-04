@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var netlog = getLogger("raopd.net")
+var netlog = getLogger("raopd.net", "Low level networking")
 
 func getPortsFromTransport(transport string) (control int, timing int, err error) {
 	ts := strings.Split(transport, ";")

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var seqlog = getLogger("raopd.sequencer")
+var seqlog = getLogger("raopd.sequencer", "Audio packet ordering and resends")
 var debugSequenceLogFlag bool
 
 type sequencer struct {

@@ -32,7 +32,7 @@ type audioStreams struct {
 	streams      []*audioStream
 }
 
-var audiolog = getLogger("raopd.audio")
+var audiolog = getLogger("raopd.audio", "Audio Output")
 
 func (r *audioStreams) initAlac(rtpmap, fmtpstr string) error {
 	var err error

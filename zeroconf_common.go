@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var zconflog = getLogger("raopd.zeroconf")
+var zconflog = getLogger("raopd.zeroconf", "Zero Configuration")
 
 type zeroconfRecord struct {
 	serviceName   string
